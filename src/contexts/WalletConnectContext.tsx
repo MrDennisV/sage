@@ -287,19 +287,15 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
   }, [signClient, wallet, handleAndRespond, setPendingRequests, addError]);
 
   // The relayer only auto-reconnects when its socket reports closed. After the
-  // OS suspends the app (sleep, minimized window) the socket can stay half-open
-  // (readyState === 1) while delivering nothing, so incoming session_requests
-  // are silently dropped until the wallet is restarted. Restart the transport
-  // when the app regains focus or the network returns; this tears down the dead
-  // socket and re-subscribes to the active session topics.
+  // OS suspends the app (sleep, minimized window, mobile background) the socket
+  // can stay half-open (readyState === 1) while delivering nothing, so incoming
+  // session_requests are silently dropped until the wallet is restarted.
+  // Restart the transport after a resume to tear down the dead socket and
+  // re-subscribe to the active session topics.
   useEffect(() => {
     if (!signClient) return;
 
-    let lastRestart = 0;
-    const refreshTransport = async () => {
-      const now = Date.now();
-      if (now - lastRestart < 3000) return;
-      lastRestart = now;
+    const restartTransport = async () => {
       try {
         await signClient.core.relayer.restartTransport();
       } catch (error) {
@@ -307,17 +303,24 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Only a suspend long enough to drop the socket needs a restart; restarting
+    // on every quick refocus would needlessly churn a healthy connection.
+    const STALE_AFTER_MS = 10000;
+    let hiddenSince = 0;
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') refreshTransport();
+      if (document.visibilityState === 'hidden') {
+        hiddenSince = Date.now();
+      } else if (hiddenSince && Date.now() - hiddenSince > STALE_AFTER_MS) {
+        hiddenSince = 0;
+        restartTransport();
+      }
     };
 
-    window.addEventListener('online', refreshTransport);
-    window.addEventListener('focus', refreshTransport);
+    window.addEventListener('online', restartTransport);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
-      window.removeEventListener('online', refreshTransport);
-      window.removeEventListener('focus', refreshTransport);
+      window.removeEventListener('online', restartTransport);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [signClient]);
