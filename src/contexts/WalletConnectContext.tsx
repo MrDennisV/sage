@@ -286,6 +286,42 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     };
   }, [signClient, wallet, handleAndRespond, setPendingRequests, addError]);
 
+  // The relayer only auto-reconnects when its socket reports closed. After the
+  // OS suspends the app (sleep, minimized window) the socket can stay half-open
+  // (readyState === 1) while delivering nothing, so incoming session_requests
+  // are silently dropped until the wallet is restarted. Restart the transport
+  // when the app regains focus or the network returns; this tears down the dead
+  // socket and re-subscribes to the active session topics.
+  useEffect(() => {
+    if (!signClient) return;
+
+    let lastRestart = 0;
+    const refreshTransport = async () => {
+      const now = Date.now();
+      if (now - lastRestart < 3000) return;
+      lastRestart = now;
+      try {
+        await signClient.core.relayer.restartTransport();
+      } catch (error) {
+        console.error('WalletConnect relay restart failed:', error);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshTransport();
+    };
+
+    window.addEventListener('online', refreshTransport);
+    window.addEventListener('focus', refreshTransport);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', refreshTransport);
+      window.removeEventListener('focus', refreshTransport);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [signClient]);
+
   const pair = async (uri: string) => {
     if (!signClient) {
       console.error('Sign client not initialized');
