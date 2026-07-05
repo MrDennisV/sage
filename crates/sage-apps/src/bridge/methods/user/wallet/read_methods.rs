@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use sage_api::wallet_connect::GetAssetCoins;
 use sage_api::{
     CheckAddress, GetCoins, GetCoinsByIds, GetDerivations, GetPendingTransactions,
     GetSpendableCoinCount, GetSyncStatus, GetTransaction, GetTransactions, GetVersion,
@@ -215,6 +216,14 @@ define_wallet_read_params_async_method!(
     "wallet.getCoins",
     GetCoins,
     get_coins
+);
+
+define_wallet_read_params_async_method!(
+    WalletGetAssetCoins,
+    WalletGetAssetCoins,
+    "wallet.getAssetCoins",
+    GetAssetCoins,
+    get_asset_coins
 );
 
 define_wallet_read_params_async_method!(

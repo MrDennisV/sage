@@ -81,6 +81,24 @@ pub(crate) fn get_user_capability_definition(
             "Allows the app to submit XCH transactions without asking for per-transaction approval.",
             CapabilityFlags::new(false, false, false, true, false),
         ),
+        UserBridgeCapability::WalletGetAssetCoins => CapabilityDefinition::new(
+            capability,
+            "Read spendable coins",
+            "Allows the app to read your spendable coins, including their puzzle reveals, to build transactions.",
+            CapabilityFlags::new(false, false, true, true, true),
+        ),
+        UserBridgeCapability::WalletSignCoinSpends => CapabilityDefinition::new(
+            capability,
+            "Sign coin spends",
+            "Allows the app to have your wallet sign coin spends it constructs, without broadcasting them.",
+            CapabilityFlags::new(false, false, true, true, true),
+        ),
+        UserBridgeCapability::WalletSignMessage => CapabilityDefinition::new(
+            capability,
+            "Sign message",
+            "Allows the app to have your wallet sign a message with your key.",
+            CapabilityFlags::new(false, false, true, true, true),
+        ),
         UserBridgeCapability::WalletGetSyncStatus => CapabilityDefinition::new(
             capability,
             "Read sync status",

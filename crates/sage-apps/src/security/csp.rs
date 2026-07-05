@@ -7,7 +7,7 @@ fn csp_source_list(items: &[String]) -> String {
 }
 
 pub fn build_app_csp(app: &SharedSageApp, network_id: &str) -> String {
-    let mut connect_sources = BTreeSet::from(["'self'".to_string()]);
+    let mut whitelist = BTreeSet::<String>::new();
 
     app.with(|app| {
         for entry in app
@@ -15,26 +15,28 @@ pub fn build_app_csp(app: &SharedSageApp, network_id: &str) -> String {
             .network()
             .effective_whitelist_for_network(network_id)
         {
-            connect_sources.insert(entry.as_permission_string());
+            whitelist.insert(entry.as_permission_string());
         }
     });
 
+    // A granted network host is usable for fetch/WebSocket (connect-src) and for
+    // loading images/media it serves (img-src/media-src). Without the latter,
+    // apps cannot show avatars or media hosted on a host the user already
+    // approved.
+    let with_whitelist = |base: &[&str]| {
+        let mut sources = base.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+        sources.extend(whitelist.iter().cloned());
+        csp_source_list(&sources.into_iter().collect::<Vec<_>>())
+    };
+
     let child_src = csp_source_list(&["'none'".to_string()]);
-    let connect_src = csp_source_list(&connect_sources.into_iter().collect::<Vec<_>>());
+    let connect_src = with_whitelist(&["'self'"]);
     let default_src = csp_source_list(&["'self'".to_string()]);
     let font_src = csp_source_list(&["'self'".to_string(), "data:".to_string()]);
     let frame_src = csp_source_list(&["'none'".to_string()]);
-    let img_src = csp_source_list(&[
-        "'self'".to_string(),
-        "data:".to_string(),
-        "blob:".to_string(),
-    ]);
+    let img_src = with_whitelist(&["'self'", "data:", "blob:"]);
     let manifest_src = csp_source_list(&["'none'".to_string()]);
-    let media_src = csp_source_list(&[
-        "'self'".to_string(),
-        "data:".to_string(),
-        "blob:".to_string(),
-    ]);
+    let media_src = with_whitelist(&["'self'", "data:", "blob:"]);
     let object_src = csp_source_list(&["'none'".to_string()]);
     let prefetch_src = csp_source_list(&["'none'".to_string()]);
     let script_src = csp_source_list(&["'self'".to_string(), "'wasm-unsafe-eval'".to_string()]);

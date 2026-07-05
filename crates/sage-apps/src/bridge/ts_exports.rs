@@ -4,7 +4,11 @@ use sage_api::{
     GetPendingTransactions, GetPendingTransactionsResponse, GetSecretKey, GetSecretKeyResponse,
     GetSpendableCoinCount, GetSpendableCoinCountResponse, GetSyncStatus, GetSyncStatusResponse,
     GetTransaction, GetTransactionResponse, GetTransactions, GetTransactionsResponse, GetVersion,
-    GetVersionResponse, GetXchUsdPriceResponse, TransactionResponse,
+    GetVersionResponse, GetXchUsdPriceResponse, SignCoinSpends, SignCoinSpendsResponse,
+    TransactionResponse,
+};
+use sage_api::wallet_connect::{
+    GetAssetCoins, SignMessageWithPublicKey, SignMessageWithPublicKeyResponse, SpendableCoin,
 };
 use specta::TypeCollection;
 use specta_typescript::{BigIntExportBehavior, Typescript};
@@ -71,6 +75,12 @@ pub fn export_user_bridge_typescript() -> Result<String, String> {
     types.register::<GetCoinsByIdsResponse>();
     types.register::<GetCoins>();
     types.register::<GetCoinsResponse>();
+    types.register::<GetAssetCoins>();
+    types.register::<SpendableCoin>();
+    types.register::<SignCoinSpends>();
+    types.register::<SignCoinSpendsResponse>();
+    types.register::<SignMessageWithPublicKey>();
+    types.register::<SignMessageWithPublicKeyResponse>();
     types.register::<GetTransaction>();
     types.register::<GetTransactionResponse>();
     types.register::<GetTransactions>();

@@ -2,11 +2,13 @@ mod get_key;
 mod get_secret_key;
 mod read_methods;
 mod send_xch;
+mod signing;
 
 pub(crate) use get_key::*;
 pub(crate) use get_secret_key::*;
 pub(crate) use read_methods::*;
 pub(crate) use send_xch::*;
+pub(crate) use signing::*;
 
 use crate::{BridgeContext, BridgeMethodHandleError};
 

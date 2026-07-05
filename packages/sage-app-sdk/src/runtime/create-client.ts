@@ -235,6 +235,27 @@ export function createSageClient(core: BridgeRuntimeCore): SageClient {
           input,
         );
       },
+
+      async getAssetCoins(input: Generated.GetAssetCoins) {
+        return await callHost<Generated.SpendableCoin[]>(
+          'wallet.getAssetCoins',
+          input,
+        );
+      },
+
+      async signCoinSpends(input: Generated.SignCoinSpends) {
+        return await callHost<Generated.SignCoinSpendsResponse>(
+          'wallet.signCoinSpends',
+          input,
+        );
+      },
+
+      async signMessage(input: Generated.SignMessageWithPublicKey) {
+        return await callHost<Generated.SignMessageWithPublicKeyResponse>(
+          'wallet.signMessage',
+          input,
+        );
+      },
     },
 
     environment: {

@@ -31,6 +31,10 @@ function titleForApproval(approval: PendingBridgeApprovalView) {
   switch (approval.approval.kind) {
     case 'sendXch':
       return 'Approve XCH transaction';
+    case 'signCoinSpends':
+      return 'Approve signing coin spends';
+    case 'signMessage':
+      return 'Approve message signature';
     case 'getSecretKey':
       return 'Approve secret key access';
     case 'capabilityGrant':

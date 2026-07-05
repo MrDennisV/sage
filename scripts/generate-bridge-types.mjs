@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(import.meta.dirname, '..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 execFileSync(
   'cargo',

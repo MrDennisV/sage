@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::{
     AppState, ResolvedRunningApp, SharedSageApp, app_id_from_webview_label, build_app_csp,
-    resolve_running_app,
+    origin_host_matches, protocol_scheme_for_app, resolve_running_app,
 };
 
 pub async fn handle_user_app_protocol_request(
@@ -96,7 +96,12 @@ fn protocol_file_path_for_request(
     app: &SharedSageApp,
     request: &Request<Vec<u8>>,
 ) -> AnyResult<PathBuf> {
-    if request.uri().host() != Some(&app.origin_id()) {
+    if !origin_host_matches(
+        protocol_scheme_for_app(app),
+        &app.origin_id(),
+        request.uri().scheme_str().unwrap_or_default(),
+        request.uri().host(),
+    ) {
         anyhow::bail!("host mismatch");
     }
 

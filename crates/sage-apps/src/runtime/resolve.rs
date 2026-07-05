@@ -65,7 +65,35 @@ pub fn protocol_scheme_for_app(app: &SharedSageApp) -> &'static str {
 }
 
 pub fn is_allowed_app_url(url: &Url, app: &SharedSageApp) -> bool {
-    url.scheme() == protocol_scheme_for_app(app) && url.host_str() == Some(&app.origin_id())
+    app_protocol_origin_matches(url, protocol_scheme_for_app(app), &app.origin_id())
+}
+
+/// Whether `url` is a request for `origin`'s content served over `scheme`,
+/// accounting for how each platform's webview exposes custom protocols:
+///   - Linux (WebKitGTK) / macOS (WKWebView): `scheme://origin/path`
+///   - Windows (WebView2): custom schemes are served as
+///     `http(s)://<scheme>.<origin>/path` (the scheme becomes a host label),
+///     so the native scheme/host never appear.
+pub fn app_protocol_origin_matches(url: &Url, scheme: &str, origin: &str) -> bool {
+    origin_host_matches(scheme, origin, url.scheme(), url.host_str())
+}
+
+/// Core origin check shared by the navigation guard (`url::Url`) and the
+/// protocol handler (`http::Uri`). Accepts the native `scheme`+`origin` host,
+/// or the Windows WebView2 form where the request arrives as
+/// `http(s)` with host `<scheme>.<origin>`.
+pub fn origin_host_matches(
+    scheme: &str,
+    origin: &str,
+    request_scheme: &str,
+    request_host: Option<&str>,
+) -> bool {
+    if request_scheme == scheme && request_host == Some(origin) {
+        return true;
+    }
+
+    matches!(request_scheme, "http" | "https")
+        && request_host == Some(format!("{scheme}.{origin}").as_str())
 }
 
 pub fn build_entry_src_for(

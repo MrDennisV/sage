@@ -7,9 +7,10 @@ import {
   statSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(import.meta.dirname, '..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const runtimeSrc = join(repoRoot, 'builtin-apps/src/runtime');
 const sandboxTestSrc = join(repoRoot, 'builtin-apps/src/sandbox-test');
@@ -44,7 +45,7 @@ function finalizeManifest(source, dist) {
       '--dist',
       dist,
     ],
-    { stdio: 'inherit', cwd: repoRoot },
+    { stdio: 'inherit', cwd: repoRoot, shell: process.platform === 'win32' },
   );
 }
 

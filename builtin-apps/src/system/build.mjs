@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const packageRoot = resolve(import.meta.dirname);
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)));
 const appsRoot = join(packageRoot, 'apps');
 const outRoot = resolve(packageRoot, '../../build/dist/system');
 
@@ -32,7 +33,7 @@ function run(command, args) {
     const child = spawn(command, args, {
       cwd: packageRoot,
       stdio: 'inherit',
-      shell: false,
+      shell: process.platform === 'win32',
     });
 
     child.on('error', rejectPromise);

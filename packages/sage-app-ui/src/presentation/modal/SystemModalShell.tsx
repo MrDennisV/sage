@@ -29,7 +29,12 @@ export function SystemModalShell({
         style={{
           backdropFilter: 'blur(80px) saturate(0.55)',
           WebkitBackdropFilter: 'blur(80px) saturate(0.55)',
-          backgroundColor: resolveBackgroundTintWithAlpha(),
+          // Opaque background: the frosted-glass look relies on backdrop-filter,
+          // which WebView2 (Windows) does not render — a translucent tint then
+          // shows through as a see-through modal. Full alpha keeps it readable
+          // everywhere (still theme-aware) while backdrop-filter enhances where
+          // supported.
+          backgroundColor: resolveBackgroundTintWithAlpha(1),
         }}
       >
         {children}

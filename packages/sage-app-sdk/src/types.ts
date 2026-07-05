@@ -60,6 +60,16 @@ export type SageWalletClient = {
   sendXch(
     input: Generated.WalletSendXchParams,
   ): Promise<Generated.TransactionResponse>;
+
+  getAssetCoins(
+    input: Generated.GetAssetCoins,
+  ): Promise<Generated.SpendableCoin[]>;
+  signCoinSpends(
+    input: Generated.SignCoinSpends,
+  ): Promise<Generated.SignCoinSpendsResponse>;
+  signMessage(
+    input: Generated.SignMessageWithPublicKey,
+  ): Promise<Generated.SignMessageWithPublicKeyResponse>;
 };
 
 export type SageAppLifecycleClient = {
