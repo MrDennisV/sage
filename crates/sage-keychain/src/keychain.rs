@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bip39::Mnemonic;
-use chia_wallet_sdk::prelude::*;
+use chia_bls::{PublicKey, SecretKey};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
