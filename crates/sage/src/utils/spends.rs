@@ -1,14 +1,14 @@
-use chia_wallet_sdk::prelude::*;
+use chia_bls::Signature;
+use chia_protocol::{CoinSpend, SpendBundle};
+use chia_sdk_signer::AggSigConstants;
+use sage_database::SqlExecutor;
+#[cfg(feature = "native")]
 use sage_wallet::{SyncCommand, Transaction, insert_transaction};
 
 use crate::{Error, Result, Sage};
 
-impl Sage {
-    pub(crate) async fn sign(
-        &self,
-        coin_spends: Vec<CoinSpend>,
-        partial: bool,
-    ) -> Result<SpendBundle> {
+impl<E: SqlExecutor> Sage<E> {
+    pub async fn sign(&self, coin_spends: Vec<CoinSpend>, partial: bool) -> Result<SpendBundle> {
         let wallet = self.wallet()?;
 
         let (_mnemonic, Some(master_sk)) =
@@ -28,7 +28,10 @@ impl Sage {
 
         Ok(spend_bundle)
     }
+}
 
+#[cfg(feature = "native")]
+impl Sage {
     pub(crate) async fn submit(&self, spend_bundle: SpendBundle) -> Result<()> {
         let wallet = self.wallet()?;
         let peer = self

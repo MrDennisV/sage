@@ -1,6 +1,8 @@
+#[cfg(feature = "native")]
 use std::{fs, str::FromStr};
 
 use bip39::Mnemonic;
+#[cfg(feature = "native")]
 use chia_wallet_sdk::{
     chia::{
         bls::{
@@ -13,19 +15,139 @@ use chia_wallet_sdk::{
 };
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+#[cfg(feature = "native")]
 use sage_api::{
-    DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, GenerateMnemonic,
-    GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse, GetSecretKey,
-    GetSecretKeyResponse, ImportKey, ImportKeyResponse, KeyInfo, KeyKind, Login, LoginResponse,
-    Logout, LogoutResponse, RenameKey, RenameKeyResponse, Resync, ResyncResponse, SecretKeyInfo,
-    SetWalletEmoji, SetWalletEmojiResponse,
+    DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, ImportKey,
+    ImportKeyResponse, Login, LoginResponse, Logout, LogoutResponse, Resync, ResyncResponse,
 };
+use sage_api::{
+    GenerateMnemonic, GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse,
+    GetSecretKey, GetSecretKeyResponse, KeyInfo, KeyKind, RenameKey, RenameKeyResponse,
+    SecretKeyInfo, SetWalletEmoji, SetWalletEmojiResponse,
+};
+#[cfg(feature = "native")]
 use sage_config::Wallet;
+use sage_database::SqlExecutor;
+#[cfg(feature = "native")]
 use sage_database::{Database, Derivation};
+#[cfg(feature = "native")]
 use sqlx::query;
 
 use crate::{Error, Result, Sage};
 
+impl<E: SqlExecutor> Sage<E> {
+    pub fn generate_mnemonic(&self, req: GenerateMnemonic) -> Result<GenerateMnemonicResponse> {
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mnemonic = if req.use_24_words {
+            let entropy: [u8; 32] = rng.r#gen();
+            Mnemonic::from_entropy(&entropy)?
+        } else {
+            let entropy: [u8; 16] = rng.r#gen();
+            Mnemonic::from_entropy(&entropy)?
+        };
+        Ok(GenerateMnemonicResponse {
+            mnemonic: mnemonic.to_string(),
+        })
+    }
+
+    pub fn rename_key(&mut self, req: RenameKey) -> Result<RenameKeyResponse> {
+        let Some(wallet) = self
+            .wallet_config
+            .wallets
+            .iter_mut()
+            .find(|wallet| wallet.fingerprint == req.fingerprint)
+        else {
+            return Err(Error::UnknownFingerprint);
+        };
+
+        wallet.name = req.name;
+        self.save_config()?;
+
+        Ok(RenameKeyResponse {})
+    }
+
+    pub fn set_wallet_emoji(&mut self, req: SetWalletEmoji) -> Result<SetWalletEmojiResponse> {
+        let Some(wallet) = self
+            .wallet_config
+            .wallets
+            .iter_mut()
+            .find(|wallet| wallet.fingerprint == req.fingerprint)
+        else {
+            return Err(Error::UnknownFingerprint);
+        };
+
+        wallet.emoji = req.emoji;
+        self.save_config()?;
+
+        Ok(SetWalletEmojiResponse {})
+    }
+
+    pub fn get_key(&self, req: GetKey) -> Result<GetKeyResponse> {
+        let fingerprint = req.fingerprint.or(self.config.global.fingerprint);
+
+        let Some(fingerprint) = fingerprint else {
+            return Ok(GetKeyResponse { key: None });
+        };
+
+        let wallet_config = self.wallet_config().cloned().unwrap_or_default();
+
+        let network_id = wallet_config.network.unwrap_or_else(|| self.network_id());
+
+        let Some(master_pk) = self.keychain.extract_public_key(fingerprint)? else {
+            return Ok(GetKeyResponse { key: None });
+        };
+
+        Ok(GetKeyResponse {
+            key: Some(KeyInfo {
+                name: wallet_config.name,
+                fingerprint,
+                public_key: hex::encode(master_pk.to_bytes()),
+                kind: KeyKind::Bls,
+                has_secrets: self.keychain.has_secret_key(fingerprint),
+                network_id,
+                emoji: wallet_config.emoji,
+            }),
+        })
+    }
+
+    pub fn get_secret_key(&self, req: GetSecretKey) -> Result<GetSecretKeyResponse> {
+        let (mnemonic, Some(secret_key)) = self.keychain.extract_secrets(req.fingerprint, b"")?
+        else {
+            return Ok(GetSecretKeyResponse { secrets: None });
+        };
+
+        Ok(GetSecretKeyResponse {
+            secrets: Some(SecretKeyInfo {
+                mnemonic: mnemonic.map(|m| m.to_string()),
+                secret_key: hex::encode(secret_key.to_bytes()),
+            }),
+        })
+    }
+
+    pub fn get_keys(&self, _req: GetKeys) -> Result<GetKeysResponse> {
+        let mut keys = Vec::new();
+
+        for wallet in &self.wallet_config.wallets {
+            let Some(master_pk) = self.keychain.extract_public_key(wallet.fingerprint)? else {
+                continue;
+            };
+
+            keys.push(KeyInfo {
+                name: wallet.name.clone(),
+                fingerprint: wallet.fingerprint,
+                public_key: hex::encode(master_pk.to_bytes()),
+                kind: KeyKind::Bls,
+                has_secrets: self.keychain.has_secret_key(wallet.fingerprint),
+                network_id: wallet.network.clone().unwrap_or_else(|| self.network_id()),
+                emoji: wallet.emoji.clone(),
+            });
+        }
+
+        Ok(GetKeysResponse { keys })
+    }
+}
+
+#[cfg(feature = "native")]
 impl Sage {
     pub async fn login(&mut self, req: Login) -> Result<LoginResponse> {
         self.config.global.fingerprint = Some(req.fingerprint);
@@ -105,20 +227,6 @@ impl Sage {
         }
 
         Ok(ResyncResponse {})
-    }
-
-    pub fn generate_mnemonic(&self, req: GenerateMnemonic) -> Result<GenerateMnemonicResponse> {
-        let mut rng = ChaCha20Rng::from_entropy();
-        let mnemonic = if req.use_24_words {
-            let entropy: [u8; 32] = rng.r#gen();
-            Mnemonic::from_entropy(&entropy)?
-        } else {
-            let entropy: [u8; 16] = rng.r#gen();
-            Mnemonic::from_entropy(&entropy)?
-        };
-        Ok(GenerateMnemonicResponse {
-            mnemonic: mnemonic.to_string(),
-        })
     }
 
     pub async fn import_key(&mut self, req: ImportKey) -> Result<ImportKeyResponse> {
@@ -287,101 +395,5 @@ impl Sage {
         }
 
         Ok(DeleteKeyResponse {})
-    }
-
-    pub fn rename_key(&mut self, req: RenameKey) -> Result<RenameKeyResponse> {
-        let Some(wallet) = self
-            .wallet_config
-            .wallets
-            .iter_mut()
-            .find(|wallet| wallet.fingerprint == req.fingerprint)
-        else {
-            return Err(Error::UnknownFingerprint);
-        };
-
-        wallet.name = req.name;
-        self.save_config()?;
-
-        Ok(RenameKeyResponse {})
-    }
-
-    pub fn set_wallet_emoji(&mut self, req: SetWalletEmoji) -> Result<SetWalletEmojiResponse> {
-        let Some(wallet) = self
-            .wallet_config
-            .wallets
-            .iter_mut()
-            .find(|wallet| wallet.fingerprint == req.fingerprint)
-        else {
-            return Err(Error::UnknownFingerprint);
-        };
-
-        wallet.emoji = req.emoji;
-        self.save_config()?;
-
-        Ok(SetWalletEmojiResponse {})
-    }
-
-    pub fn get_key(&self, req: GetKey) -> Result<GetKeyResponse> {
-        let fingerprint = req.fingerprint.or(self.config.global.fingerprint);
-
-        let Some(fingerprint) = fingerprint else {
-            return Ok(GetKeyResponse { key: None });
-        };
-
-        let wallet_config = self.wallet_config().cloned().unwrap_or_default();
-
-        let network_id = wallet_config.network.unwrap_or_else(|| self.network_id());
-
-        let Some(master_pk) = self.keychain.extract_public_key(fingerprint)? else {
-            return Ok(GetKeyResponse { key: None });
-        };
-
-        Ok(GetKeyResponse {
-            key: Some(KeyInfo {
-                name: wallet_config.name,
-                fingerprint,
-                public_key: hex::encode(master_pk.to_bytes()),
-                kind: KeyKind::Bls,
-                has_secrets: self.keychain.has_secret_key(fingerprint),
-                network_id,
-                emoji: wallet_config.emoji,
-            }),
-        })
-    }
-
-    pub fn get_secret_key(&self, req: GetSecretKey) -> Result<GetSecretKeyResponse> {
-        let (mnemonic, Some(secret_key)) = self.keychain.extract_secrets(req.fingerprint, b"")?
-        else {
-            return Ok(GetSecretKeyResponse { secrets: None });
-        };
-
-        Ok(GetSecretKeyResponse {
-            secrets: Some(SecretKeyInfo {
-                mnemonic: mnemonic.map(|m| m.to_string()),
-                secret_key: hex::encode(secret_key.to_bytes()),
-            }),
-        })
-    }
-
-    pub fn get_keys(&self, _req: GetKeys) -> Result<GetKeysResponse> {
-        let mut keys = Vec::new();
-
-        for wallet in &self.wallet_config.wallets {
-            let Some(master_pk) = self.keychain.extract_public_key(wallet.fingerprint)? else {
-                continue;
-            };
-
-            keys.push(KeyInfo {
-                name: wallet.name.clone(),
-                fingerprint: wallet.fingerprint,
-                public_key: hex::encode(master_pk.to_bytes()),
-                kind: KeyKind::Bls,
-                has_secrets: self.keychain.has_secret_key(wallet.fingerprint),
-                network_id: wallet.network.clone().unwrap_or_else(|| self.network_id()),
-                emoji: wallet.emoji.clone(),
-            });
-        }
-
-        Ok(GetKeysResponse { keys })
     }
 }

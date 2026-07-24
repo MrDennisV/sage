@@ -53,7 +53,7 @@ sage-client = { path = "./crates/sage-client" }
 sage-config = { path = "./crates/sage-config" }
 sage-database = { path = "./crates/sage-database", default-features = false }
 sage-keychain = { path = "./crates/sage-keychain" }
-sage-wallet = { path = "./crates/sage-wallet" }
+sage-wallet = { path = "./crates/sage-wallet", default-features = false }
 sage-assets = { path = "./crates/sage-assets", default-features = false }
 sage-rpc = { path = "./crates/sage-rpc" }
 

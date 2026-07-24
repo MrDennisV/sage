@@ -19,7 +19,7 @@ sage = { workspace = true }
 sage-api = { workspace = true, features = ["tauri"] }
 sage-api-macro = { workspace = true }
 sage-config = { workspace = true }
-sage-wallet = { workspace = true }
+sage-wallet = { workspace = true, features = ["native"] }
 sage-rpc = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tauri = { workspace = true, features = [] }
