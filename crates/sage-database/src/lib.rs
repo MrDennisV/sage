@@ -22,26 +22,70 @@ pub(crate) use utils::*;
 use std::num::TryFromIntError;
 
 #[cfg(feature = "sqlite")]
-use sqlx::{Sqlite, SqlitePool, Transaction as SqliteTransaction};
+use sqlx::SqlitePool;
 use thiserror::Error;
 #[cfg(feature = "sqlite")]
 use tracing::info;
 
-#[cfg(feature = "sqlite")]
-#[derive(Debug, Clone)]
-pub struct Database {
-    pub(crate) pool: SqlitePool,
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sqlite")] {
+        #[derive(Debug, Clone)]
+        pub struct Database<E: SqlExecutor = SqlxExecutor> {
+            pub(crate) executor: E,
+        }
+
+        #[derive(Debug)]
+        pub struct DatabaseTx<'a, E: SqlExecutor + 'a = SqlxExecutor> {
+            pub(crate) tx: E::Tx<'a>,
+        }
+    } else {
+        #[derive(Debug, Clone)]
+        pub struct Database<E: SqlExecutor> {
+            pub(crate) executor: E,
+        }
+
+        #[derive(Debug)]
+        pub struct DatabaseTx<'a, E: SqlExecutor + 'a> {
+            pub(crate) tx: E::Tx<'a>,
+        }
+    }
+}
+
+impl<E: SqlExecutor> Database<E> {
+    pub fn from_executor(executor: E) -> Self {
+        Self { executor }
+    }
+
+    pub async fn tx(&self) -> Result<DatabaseTx<'_, E>> {
+        let tx = self.executor.begin().await?;
+        Ok(DatabaseTx::new(tx))
+    }
+}
+
+impl<'a, E: SqlExecutor + 'a> DatabaseTx<'a, E> {
+    pub fn new(tx: E::Tx<'a>) -> Self {
+        Self { tx }
+    }
+
+    pub async fn commit(self) -> Result<()> {
+        self.tx.commit().await
+    }
+
+    pub async fn rollback(self) -> Result<()> {
+        self.tx.rollback().await
+    }
 }
 
 #[cfg(feature = "sqlite")]
 impl Database {
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            executor: SqlxExecutor::new(pool),
+        }
     }
 
-    pub async fn tx(&self) -> Result<DatabaseTx<'_>> {
-        let tx = self.pool.begin().await?;
-        Ok(DatabaseTx::new(tx))
+    pub(crate) fn pool(&self) -> &SqlitePool {
+        &self.executor.pool
     }
 
     pub async fn run_rust_migrations(&self, ticker: String) -> Result<()> {
@@ -67,25 +111,7 @@ impl Database {
 }
 
 #[cfg(feature = "sqlite")]
-#[derive(Debug)]
-pub struct DatabaseTx<'a> {
-    pub(crate) tx: SqliteTransaction<'a, Sqlite>,
-}
-
-#[cfg(feature = "sqlite")]
-impl<'a> DatabaseTx<'a> {
-    pub fn new(tx: SqliteTransaction<'a, Sqlite>) -> Self {
-        Self { tx }
-    }
-
-    pub async fn commit(self) -> Result<()> {
-        Ok(self.tx.commit().await?)
-    }
-
-    pub async fn rollback(self) -> Result<()> {
-        Ok(self.tx.rollback().await?)
-    }
-
+impl DatabaseTx<'_> {
     pub async fn rust_migration_version(&mut self) -> Result<i64> {
         let row = sqlx::query_scalar!("SELECT version FROM rust_migrations LIMIT 1")
             .fetch_one(&mut *self.tx)

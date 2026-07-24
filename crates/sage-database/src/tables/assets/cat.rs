@@ -14,7 +14,7 @@ impl Database {
             ORDER BY name ASC
             "
         )
-        .fetch_all(&self.pool)
+        .fetch_all(self.pool())
         .await?
         .into_iter()
         .map(|row| {
@@ -50,7 +50,7 @@ impl Database {
             ORDER BY name ASC
             "
         )
-        .fetch_all(&self.pool)
+        .fetch_all(self.pool())
         .await?
         .into_iter()
         .map(|row| {

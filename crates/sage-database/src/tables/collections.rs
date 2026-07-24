@@ -21,15 +21,15 @@ impl Database {
         offset: u32,
         include_hidden: bool,
     ) -> Result<(Vec<CollectionRow>, u32)> {
-        collections(&self.pool, limit, offset, include_hidden).await
+        collections(self.pool(), limit, offset, include_hidden).await
     }
 
     pub async fn collection(&self, hash: Bytes32) -> Result<Option<CollectionRow>> {
-        collection(&self.pool, hash).await
+        collection(self.pool(), hash).await
     }
 
     pub async fn set_collection_visible(&self, hash: Bytes32, visible: bool) -> Result<()> {
-        set_collection_visible(&self.pool, hash, visible).await
+        set_collection_visible(self.pool(), hash, visible).await
     }
 }
 

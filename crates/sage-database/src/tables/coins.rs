@@ -66,7 +66,7 @@ pub struct UnsyncedCoin {
 
 impl Database {
     pub async fn coins_by_ids(&self, coin_ids: &[String]) -> Result<Vec<CoinRow>> {
-        coins_by_ids(&self.pool, coin_ids).await
+        coins_by_ids(self.pool(), coin_ids).await
     }
 
     pub async fn coin_records(
@@ -79,7 +79,7 @@ impl Database {
         filter_mode: CoinFilterMode,
     ) -> Result<(Vec<CoinRow>, u32)> {
         coin_records(
-            &self.pool,
+            self.pool(),
             asset_filter,
             limit,
             offset,
@@ -91,27 +91,27 @@ impl Database {
     }
 
     pub async fn are_coins_spendable(&self, coin_ids: &[String]) -> Result<bool> {
-        are_coins_spendable(&self.pool, coin_ids).await
+        are_coins_spendable(self.pool(), coin_ids).await
     }
 
     pub async fn total_coin_count(&self) -> Result<u32> {
-        total_coin_count(&self.pool).await
+        total_coin_count(self.pool()).await
     }
 
     pub async fn selectable_xch_coin_count(&self) -> Result<u32> {
-        selectable_coin_count(&self.pool, Bytes32::default()).await
+        selectable_coin_count(self.pool(), Bytes32::default()).await
     }
 
     pub async fn selectable_cat_coin_count(&self, asset_id: Bytes32) -> Result<u32> {
-        selectable_coin_count(&self.pool, asset_id).await
+        selectable_coin_count(self.pool(), asset_id).await
     }
 
     pub async fn synced_coin_count(&self) -> Result<u32> {
-        synced_coin_count(&self.pool).await
+        synced_coin_count(self.pool()).await
     }
 
     pub async fn unsynced_coins(&self, limit: usize) -> Result<Vec<UnsyncedCoin>> {
-        unsynced_coins(&self.pool, limit).await
+        unsynced_coins(self.pool(), limit).await
     }
 
     pub async fn update_coin(
@@ -120,83 +120,83 @@ impl Database {
         asset_hash: Bytes32,
         p2_puzzle_hash: Bytes32,
     ) -> Result<()> {
-        update_coin(&self.pool, coin_id, asset_hash, p2_puzzle_hash).await
+        update_coin(self.pool(), coin_id, asset_hash, p2_puzzle_hash).await
     }
 
     pub async fn subscription_coin_ids(&self) -> Result<Vec<Bytes32>> {
-        subscription_coin_ids(&self.pool).await
+        subscription_coin_ids(self.pool()).await
     }
 
     pub async fn xch_balance(&self) -> Result<u128> {
-        token_balance(&self.pool, Bytes32::default()).await
+        token_balance(self.pool(), Bytes32::default()).await
     }
 
     pub async fn cat_balance(&self, asset_id: Bytes32) -> Result<u128> {
-        token_balance(&self.pool, asset_id).await
+        token_balance(self.pool(), asset_id).await
     }
 
     pub async fn selectable_xch_balance(&self) -> Result<u128> {
-        selectable_token_balance(&self.pool, Bytes32::default()).await
+        selectable_token_balance(self.pool(), Bytes32::default()).await
     }
 
     pub async fn selectable_cat_balance(&self, asset_id: Bytes32) -> Result<u128> {
-        selectable_token_balance(&self.pool, asset_id).await
+        selectable_token_balance(self.pool(), asset_id).await
     }
 
     pub async fn selectable_xch_coins(&self) -> Result<Vec<Coin>> {
-        selectable_xch_coins(&self.pool).await
+        selectable_xch_coins(self.pool()).await
     }
 
     pub async fn selectable_cat_coins(&self, asset_id: Bytes32) -> Result<Vec<Cat>> {
-        selectable_cat_coins(&self.pool, asset_id).await
+        selectable_cat_coins(self.pool(), asset_id).await
     }
 
     pub async fn coin_kind(&self, coin_id: Bytes32) -> Result<Option<CoinKind>> {
-        coin_kind(&self.pool, coin_id).await
+        coin_kind(self.pool(), coin_id).await
     }
 
     pub async fn xch_coin(&self, coin_id: Bytes32) -> Result<Option<Coin>> {
-        xch_coin(&self.pool, coin_id).await
+        xch_coin(self.pool(), coin_id).await
     }
 
     pub async fn cat_coin(&self, coin_id: Bytes32) -> Result<Option<Cat>> {
-        cat_coin(&self.pool, coin_id).await
+        cat_coin(self.pool(), coin_id).await
     }
 
     pub async fn did_coin(&self, coin_id: Bytes32) -> Result<Option<SerializedDid>> {
-        did_coin(&self.pool, coin_id).await
+        did_coin(self.pool(), coin_id).await
     }
 
     pub async fn nft_coin(&self, coin_id: Bytes32) -> Result<Option<SerializedNft>> {
-        nft_coin(&self.pool, coin_id).await
+        nft_coin(self.pool(), coin_id).await
     }
 
     pub async fn option_coin(&self, coin_id: Bytes32) -> Result<Option<OptionContract>> {
-        option_coin(&self.pool, coin_id).await
+        option_coin(self.pool(), coin_id).await
     }
 
     pub async fn did(&self, launcher_id: Bytes32) -> Result<Option<SerializedDid>> {
-        did(&self.pool, launcher_id).await
+        did(self.pool(), launcher_id).await
     }
 
     pub async fn spendable_did(&self, launcher_id: Bytes32) -> Result<Option<SerializedDid>> {
-        spendable_did(&self.pool, launcher_id).await
+        spendable_did(self.pool(), launcher_id).await
     }
 
     pub async fn nft(&self, launcher_id: Bytes32) -> Result<Option<SerializedNft>> {
-        nft(&self.pool, launcher_id).await
+        nft(self.pool(), launcher_id).await
     }
 
     pub async fn spendable_nft(&self, launcher_id: Bytes32) -> Result<Option<SerializedNft>> {
-        spendable_nft(&self.pool, launcher_id).await
+        spendable_nft(self.pool(), launcher_id).await
     }
 
     pub async fn option(&self, launcher_id: Bytes32) -> Result<Option<OptionContract>> {
-        option(&self.pool, launcher_id).await
+        option(self.pool(), launcher_id).await
     }
 
     pub async fn spendable_option(&self, launcher_id: Bytes32) -> Result<Option<OptionContract>> {
-        spendable_option(&self.pool, launcher_id).await
+        spendable_option(self.pool(), launcher_id).await
     }
 
     pub async fn underlying_coin_kind(&self, launcher_id: Bytes32) -> Result<Option<CoinKind>> {
@@ -214,7 +214,7 @@ impl Database {
             ",
             launcher_id_ref
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         else {
             return Ok(None);

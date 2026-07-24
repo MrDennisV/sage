@@ -81,7 +81,7 @@ impl Database {
             ",
             hash
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         .map(|row| {
             Ok(NftRow {
@@ -212,7 +212,7 @@ impl Database {
         query.push_bind(offset);
         let query = query.build();
 
-        let rows = query.fetch_all(&self.pool).await?;
+        let rows = query.fetch_all(self.pool()).await?;
         let total_count = rows
             .first()
             .map_or(Ok(0), |row| row.get::<i64, _>("total_count").try_into())?;
@@ -300,7 +300,7 @@ impl Database {
             limit,
             offset
         )
-        .fetch_all(&self.pool)
+        .fetch_all(self.pool())
         .await?;
 
         let total_count = query!(
@@ -308,7 +308,7 @@ impl Database {
             FROM owned_nfts 
             WHERE minter_hash IS NOT NULL"
         )
-        .fetch_one(&self.pool)
+        .fetch_one(self.pool())
         .await?
         .total_count
         .try_into()
@@ -335,7 +335,7 @@ impl Database {
             ",
             hash
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         .map(|row| {
             Ok(NftOfferInfo {

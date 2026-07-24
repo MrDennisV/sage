@@ -44,27 +44,27 @@ impl Database {
         max_failed_attempts: u32,
         limit: u32,
     ) -> Result<Vec<FileUri>> {
-        candidates_for_download(&self.pool, check_every_seconds, max_failed_attempts, limit).await
+        candidates_for_download(self.pool(), check_every_seconds, max_failed_attempts, limit).await
     }
 
     pub async fn thumbnail(&self, hash: Bytes32) -> Result<Option<ResizedImage>> {
-        resized_image(&self.pool, hash, ResizedImageKind::Thumbnail).await
+        resized_image(self.pool(), hash, ResizedImageKind::Thumbnail).await
     }
 
     pub async fn icon(&self, hash: Bytes32) -> Result<Option<ResizedImage>> {
-        resized_image(&self.pool, hash, ResizedImageKind::Icon).await
+        resized_image(self.pool(), hash, ResizedImageKind::Icon).await
     }
 
     pub async fn full_file_data(&self, hash: Bytes32) -> Result<Option<FileData>> {
-        full_file_data(&self.pool, hash).await
+        full_file_data(self.pool(), hash).await
     }
 
     pub async fn checked_files(&self) -> Result<u64> {
-        checked_files(&self.pool).await
+        checked_files(self.pool()).await
     }
 
     pub async fn total_files(&self) -> Result<u64> {
-        total_files(&self.pool).await
+        total_files(self.pool()).await
     }
 }
 

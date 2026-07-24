@@ -59,7 +59,7 @@ impl Database {
         include_hidden: bool,
     ) -> Result<(Vec<OptionRow>, u32)> {
         owned_options(
-            &self.pool,
+            self.pool(),
             limit,
             offset,
             sort_mode,
@@ -109,7 +109,7 @@ impl Database {
             ",
             launcher_id_ref
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         .map(|row| {
             Ok(OptionRow {
@@ -197,7 +197,7 @@ impl Database {
             ",
             launcher_id_ref
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         else {
             return Ok(None);
@@ -243,7 +243,7 @@ impl Database {
             ",
             hash
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         .map(|row| {
             Ok(OptionOfferInfo {
@@ -285,7 +285,7 @@ impl Database {
             ",
             launcher_id_ref
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(self.pool())
         .await?
         .map(|row| {
             Ok(OptionAssetsRow {

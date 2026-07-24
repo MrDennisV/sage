@@ -49,7 +49,7 @@ impl Database {
             ",
             hash
         )
-        .fetch_one(&self.pool)
+        .fetch_one(self.pool())
         .await?
         .count;
 
@@ -57,7 +57,7 @@ impl Database {
     }
 
     pub async fn insert_asset(&self, asset: Asset) -> Result<()> {
-        insert_asset(&self.pool, asset).await?;
+        insert_asset(self.pool(), asset).await?;
 
         Ok(())
     }
@@ -89,7 +89,7 @@ impl Database {
             asset.is_visible,
             hash,
         )
-        .execute(&self.pool)
+        .execute(self.pool())
         .await?;
 
         Ok(())
@@ -99,21 +99,21 @@ impl Database {
         let hash = hash.as_ref();
 
         query!("SELECT kind FROM assets WHERE hash = ?", hash)
-            .fetch_optional(&self.pool)
+            .fetch_optional(self.pool())
             .await?
             .map(|row| row.kind.convert())
             .transpose()
     }
 
     pub async fn asset(&self, hash: Bytes32) -> Result<Option<Asset>> {
-        asset(&self.pool, hash).await
+        asset(self.pool(), hash).await
     }
 
     pub async fn existing_hidden_puzzle_hash(
         &self,
         asset_hash: Bytes32,
     ) -> Result<Option<Option<Bytes32>>> {
-        existing_hidden_puzzle_hash(&self.pool, asset_hash).await
+        existing_hidden_puzzle_hash(self.pool(), asset_hash).await
     }
 }
 

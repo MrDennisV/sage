@@ -17,19 +17,19 @@ impl Database {
         check_every_seconds: i64,
         limit: i64,
     ) -> Result<Vec<MempoolItem>> {
-        mempool_items_to_submit(&self.pool, check_every_seconds, limit).await
+        mempool_items_to_submit(self.pool(), check_every_seconds, limit).await
     }
 
     pub async fn mempool_coin_spends(&self, mempool_item_id: Bytes32) -> Result<Vec<CoinSpend>> {
-        mempool_coin_spends(&self.pool, mempool_item_id).await
+        mempool_coin_spends(self.pool(), mempool_item_id).await
     }
 
     pub async fn update_mempool_item_time(&self, mempool_item_id: Bytes32) -> Result<()> {
-        update_mempool_item_time(&self.pool, mempool_item_id).await
+        update_mempool_item_time(self.pool(), mempool_item_id).await
     }
 
     pub async fn mempool_items(&self) -> Result<Vec<MempoolItem>> {
-        mempool_items(&self.pool).await
+        mempool_items(self.pool()).await
     }
 }
 

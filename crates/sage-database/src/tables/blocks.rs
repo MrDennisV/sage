@@ -4,7 +4,7 @@ use sqlx::SqliteExecutor;
 
 impl Database {
     pub async fn unsynced_blocks(&self, limit: u32) -> Result<Vec<u32>> {
-        unsynced_blocks(&self.pool, limit).await
+        unsynced_blocks(self.pool(), limit).await
     }
 
     pub async fn insert_block(
@@ -14,11 +14,11 @@ impl Database {
         timestamp: Option<i64>,
         is_peak: bool,
     ) -> Result<()> {
-        insert_block(&self.pool, height, header_hash, timestamp, is_peak).await
+        insert_block(self.pool(), height, header_hash, timestamp, is_peak).await
     }
 
     pub async fn latest_peak(&self) -> Result<Option<(u32, Bytes32)>> {
-        latest_peak(&self.pool).await
+        latest_peak(self.pool()).await
     }
 }
 

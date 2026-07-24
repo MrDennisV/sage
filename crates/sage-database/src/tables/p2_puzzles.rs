@@ -53,41 +53,41 @@ pub struct DerivationRow {
 
 impl Database {
     pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
-        public_key(&self.pool, p2_puzzle_hash).await
+        public_key(self.pool(), p2_puzzle_hash).await
     }
 
     pub async fn custody_p2_puzzle_hashes(&self) -> Result<Vec<Bytes32>> {
-        custody_p2_puzzle_hashes(&self.pool).await
+        custody_p2_puzzle_hashes(self.pool()).await
     }
 
     pub async fn is_custody_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_custody_p2_puzzle_hash(&self.pool, puzzle_hash).await
+        is_custody_p2_puzzle_hash(self.pool(), puzzle_hash).await
     }
 
     pub async fn is_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_p2_puzzle_hash(&self.pool, puzzle_hash).await
+        is_p2_puzzle_hash(self.pool(), puzzle_hash).await
     }
 
     pub async fn p2_puzzle(&self, puzzle_hash: Bytes32) -> Result<P2Puzzle> {
-        match p2_puzzle_kind(&self.pool, puzzle_hash).await? {
+        match p2_puzzle_kind(self.pool(), puzzle_hash).await? {
             P2PuzzleKind::PublicKey => {
-                let Some(key) = public_key(&self.pool, puzzle_hash).await? else {
+                let Some(key) = public_key(self.pool(), puzzle_hash).await? else {
                     return Err(DatabaseError::PublicKeyNotFound);
                 };
 
                 Ok(P2Puzzle::PublicKey(key))
             }
             P2PuzzleKind::Clawback => {
-                Ok(P2Puzzle::Clawback(clawback(&self.pool, puzzle_hash).await?))
+                Ok(P2Puzzle::Clawback(clawback(self.pool(), puzzle_hash).await?))
             }
             P2PuzzleKind::Option => {
-                let launcher_id = underlying_launcher_id(&self.pool, puzzle_hash).await?;
+                let launcher_id = underlying_launcher_id(self.pool(), puzzle_hash).await?;
                 let underlying = self
                     .option_underlying(launcher_id)
                     .await?
                     .ok_or(DatabaseError::OptionUnderlyingNotFound)?;
 
-                let Some(key) = public_key(&self.pool, underlying.creator_puzzle_hash).await?
+                let Some(key) = public_key(self.pool(), underlying.creator_puzzle_hash).await?
                 else {
                     return Err(DatabaseError::PublicKeyNotFound);
                 };
@@ -102,7 +102,7 @@ impl Database {
                 }))
             }
             P2PuzzleKind::Arbor => {
-                let Some(key) = arbor_key(&self.pool, puzzle_hash).await? else {
+                let Some(key) = arbor_key(self.pool(), puzzle_hash).await? else {
                     return Err(DatabaseError::PublicKeyNotFound);
                 };
 
@@ -112,7 +112,7 @@ impl Database {
     }
 
     pub async fn derivation(&self, public_key: PublicKey) -> Result<Option<Derivation>> {
-        derivation(&self.pool, public_key).await
+        derivation(self.pool(), public_key).await
     }
 
     pub async fn derivations(
@@ -121,11 +121,11 @@ impl Database {
         limit: u32,
         offset: u32,
     ) -> Result<(Vec<DerivationRow>, u32)> {
-        derivations(&self.pool, is_hardened, limit, offset).await
+        derivations(self.pool(), is_hardened, limit, offset).await
     }
 
     pub async fn max_derivation_index(&self, is_hardened: bool) -> Result<Option<u32>> {
-        max_derivation_index(&self.pool, is_hardened).await
+        max_derivation_index(self.pool(), is_hardened).await
     }
 }
 

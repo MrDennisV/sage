@@ -34,23 +34,23 @@ pub struct OfferedAsset {
 
 impl Database {
     pub async fn offer(&self, offer_id: Bytes32) -> Result<Option<OfferRow>> {
-        offer(&self.pool, offer_id).await
+        offer(self.pool(), offer_id).await
     }
 
     pub async fn offer_assets(&self, offer_id: Bytes32) -> Result<Vec<OfferedAsset>> {
-        offer_assets(&self.pool, offer_id).await
+        offer_assets(self.pool(), offer_id).await
     }
 
     pub async fn delete_offer(&self, offer_id: Bytes32) -> Result<()> {
-        delete_offer(&self.pool, offer_id).await
+        delete_offer(self.pool(), offer_id).await
     }
 
     pub async fn offers(&self, status: Option<OfferStatus>) -> Result<Vec<OfferRow>> {
-        offers(&self.pool, status).await
+        offers(self.pool(), status).await
     }
 
     pub async fn update_offer_status(&self, offer_id: Bytes32, status: OfferStatus) -> Result<()> {
-        update_offer_status(&self.pool, offer_id, status).await
+        update_offer_status(self.pool(), offer_id, status).await
     }
 
     pub async fn offers_for_asset(
@@ -58,7 +58,7 @@ impl Database {
         asset_id: Bytes32,
         status: Option<OfferStatus>,
     ) -> Result<Vec<OfferRow>> {
-        offers_for_asset(&self.pool, asset_id, status).await
+        offers_for_asset(self.pool(), asset_id, status).await
     }
 }
 

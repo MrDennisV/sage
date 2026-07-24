@@ -20,7 +20,7 @@ pub struct TransactionCoin {
 
 impl Database {
     pub async fn transaction(&self, height: u32) -> Result<Option<Transaction>> {
-        transaction(&self.pool, height).await
+        transaction(self.pool(), height).await
     }
 
     pub async fn transactions(
@@ -30,7 +30,7 @@ impl Database {
         limit: u32,
         offset: u32,
     ) -> Result<(Vec<Transaction>, u32)> {
-        transactions(&self.pool, find_value, sort_ascending, limit, offset).await
+        transactions(self.pool(), find_value, sort_ascending, limit, offset).await
     }
 }
 

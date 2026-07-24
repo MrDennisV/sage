@@ -28,22 +28,22 @@ impl Database {
     /// Get current database statistics without performing any maintenance
     pub async fn get_database_stats(&self) -> Result<DatabaseStats> {
         let free_pages_row = sqlx::query("PRAGMA freelist_count")
-            .fetch_one(&self.pool)
+            .fetch_one(self.pool())
             .await?;
         let free_pages: i64 = free_pages_row.try_get(0)?;
 
         let total_pages_row = sqlx::query("PRAGMA page_count")
-            .fetch_one(&self.pool)
+            .fetch_one(self.pool())
             .await?;
         let total_pages: i64 = total_pages_row.try_get(0)?;
 
         let page_size_row = sqlx::query("PRAGMA page_size")
-            .fetch_one(&self.pool)
+            .fetch_one(self.pool())
             .await?;
         let page_size: i64 = page_size_row.try_get(0)?;
 
         let wal_pages_row = sqlx::query("PRAGMA wal_checkpoint")
-            .fetch_one(&self.pool)
+            .fetch_one(self.pool())
             .await?;
         let wal_pages: i64 = wal_pages_row.try_get(1).unwrap_or(0); // log_pages
 
@@ -78,20 +78,20 @@ impl Database {
 
         // 1. Update table statistics with ANALYZE
         let analyze_start = Instant::now();
-        sqlx::query("ANALYZE").execute(&self.pool).await?;
+        sqlx::query("ANALYZE").execute(self.pool()).await?;
         stats.analyze_duration_ms = analyze_start.elapsed().as_millis() as u64;
 
         let wal_start = Instant::now();
 
         // Use TRUNCATE mode to reset WAL file size
         match sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&self.pool)
+            .execute(self.pool())
             .await
         {
             Ok(_) => {
                 // Get checkpoint statistics
                 let checkpoint_row = sqlx::query("PRAGMA wal_checkpoint")
-                    .fetch_one(&self.pool)
+                    .fetch_one(self.pool())
                     .await?;
 
                 let _busy: i64 = checkpoint_row.try_get(0).unwrap_or(0);
@@ -124,14 +124,14 @@ impl Database {
 
             // Get page count before vacuum
             let pages_before_row = sqlx::query("PRAGMA page_count")
-                .fetch_one(&self.pool)
+                .fetch_one(self.pool())
                 .await?;
             let pages_before: i64 = pages_before_row.try_get(0)?;
 
-            match sqlx::query("VACUUM").execute(&self.pool).await {
+            match sqlx::query("VACUUM").execute(self.pool()).await {
                 Ok(_) => {
                     let pages_after_row = sqlx::query("PRAGMA page_count")
-                        .fetch_one(&self.pool)
+                        .fetch_one(self.pool())
                         .await?;
                     let pages_after: i64 = pages_after_row.try_get(0)?;
 
@@ -149,7 +149,7 @@ impl Database {
         // Final optimization - update statistics again if we vacuumed
         if should_vacuum {
             let final_analyze_start = Instant::now();
-            sqlx::query("ANALYZE").execute(&self.pool).await?;
+            sqlx::query("ANALYZE").execute(self.pool()).await?;
             stats.analyze_duration_ms += final_analyze_start.elapsed().as_millis() as u64;
         }
 
