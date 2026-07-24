@@ -244,6 +244,9 @@ pub enum Error {
     #[error("Database version too old")]
     DatabaseVersionTooOld,
 
+    #[error("Store error: {0}")]
+    Store(String),
+
     #[cfg(feature = "native")]
     #[error("Timeout")]
     Timeout(#[from] Elapsed),
@@ -274,6 +277,7 @@ impl Error {
             | Self::LogSubscriber(..)
             | Self::Timeout(..) => ErrorKind::Internal,
             Self::Io(..)
+            | Self::Store(..)
             | Self::Bip39(..)
             | Self::TomlDe(..)
             | Self::TomlSer(..)

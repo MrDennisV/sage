@@ -6,19 +6,15 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use chia_wallet_sdk::{
-    chia::bls::master_to_wallet_unhardened_intermediate,
-    client::{Connector, create_rustls_connector, load_ssl_cert},
-    prelude::*,
-};
+use chia_wallet_sdk::client::{Connector, create_rustls_connector, load_ssl_cert};
 use indexmap::IndexMap;
-use sage_api::{Unit, XCH};
+use sage_api::XCH;
 use sage_config::{
     Config, NetworkList, OldConfig, OldNetwork, WalletConfig, migrate_config, migrate_networks,
 };
 use sage_database::Database;
 use sage_keychain::Keychain;
-use sage_wallet::{PeerState, SyncCommand, SyncEvent, SyncManager, SyncOptions, Timeouts, Wallet};
+use sage_wallet::{PeerState, SyncCommand, SyncEvent, SyncManager, SyncOptions, Timeouts};
 use sqlx::{
     ConnectOptions, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
@@ -276,11 +272,11 @@ impl Sage {
             return Ok(());
         };
 
-        let Some(master_pk) = self.keychain.extract_public_key(fingerprint)? else {
+        // Validate the fingerprint before opening the database so an unknown
+        // key doesn't create a wallet file on disk.
+        if self.keychain.extract_public_key(fingerprint)?.is_none() {
             return Err(Error::UnknownFingerprint);
-        };
-
-        let intermediate_pk = master_to_wallet_unhardened_intermediate(&master_pk);
+        }
 
         let pool = self.connect_to_database(fingerprint).await?;
         let db = Database::new(pool);
@@ -288,32 +284,16 @@ impl Sage {
         db.run_rust_migrations(self.network().ticker.clone())
             .await?;
 
-        let wallet_config = self.wallet_config().cloned().unwrap_or_default();
-
-        let wallet = Arc::new(Wallet::new(
-            db.clone(),
-            fingerprint,
-            intermediate_pk,
-            self.network().genesis_challenge,
-            AggSigConstants::new(self.network().agg_sig_me()),
-            wallet_config
-                .change_address
-                .as_ref()
-                .map(|address| Address::decode(address))
-                .transpose()?
-                .map(|address| address.puzzle_hash),
-        ));
-
-        self.wallet = Some(wallet.clone());
-        self.unit = Unit {
-            ticker: self.network().ticker.clone(),
-            precision: self.network().precision,
-        };
+        self.login_with_database(fingerprint, db)?;
 
         self.command_sender
             .send(SyncCommand::SwitchWallet {
-                wallet: Some(wallet),
-                delta_sync: wallet_config.delta_sync(&self.wallet_config.defaults),
+                wallet: self.wallet.clone(),
+                delta_sync: self
+                    .wallet_config()
+                    .cloned()
+                    .unwrap_or_default()
+                    .delta_sync(&self.wallet_config.defaults),
             })
             .await?;
 

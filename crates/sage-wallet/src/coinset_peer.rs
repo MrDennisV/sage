@@ -5,7 +5,7 @@ use chia_sdk_coinset::{ChiaRpcClient, CoinRecord, CoinsetClient};
 use crate::{PeerApi, WalletError};
 
 
-/// A [`PeerApi`] implementation backed by the public CoinSet HTTP API, used
+/// A [`PeerApi`] implementation backed by the public Coinset HTTP API, used
 /// where the native peer protocol isn't available (such as browsers). There
 /// are no push notifications, so callers poll; `subscribe_*` methods fetch
 /// current state and subscriptions are implicit no-ops.

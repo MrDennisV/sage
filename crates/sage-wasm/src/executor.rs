@@ -59,7 +59,7 @@ struct JsRows {
     rows: Vec<Vec<JsSqlValue>>,
 }
 
-fn js_error(error: JsValue) -> DatabaseError {
+fn js_error(error: &JsValue) -> DatabaseError {
     DatabaseError::JsError(
         error
             .as_string()
@@ -78,7 +78,7 @@ fn encode_params(params: Vec<SqlValue>) -> Result<String> {
 }
 
 fn fetch_all_sync(sql: &str, params: Vec<SqlValue>) -> Result<Vec<SqlRow>> {
-    let rows = db_query(sql, &encode_params(params)?).map_err(js_error)?;
+    let rows = db_query(sql, &encode_params(params)?).map_err(|error| js_error(&error))?;
 
     let rows: JsRows =
         serde_json::from_str(&rows).map_err(|error| DatabaseError::JsError(error.to_string()))?;
@@ -96,7 +96,7 @@ fn fetch_all_sync(sql: &str, params: Vec<SqlValue>) -> Result<Vec<SqlRow>> {
 }
 
 fn execute_sync(sql: &str, params: Vec<SqlValue>) -> Result<u64> {
-    let changes = db_execute(sql, &encode_params(params)?).map_err(js_error)?;
+    let changes = db_execute(sql, &encode_params(params)?).map_err(|error| js_error(&error))?;
     Ok(changes as u64)
 }
 
@@ -118,7 +118,7 @@ impl SqlExecutor for BrowserExecutor {
     }
 
     async fn execute_batch(&self, sql: &str) -> Result<()> {
-        db_execute_batch(sql).map_err(js_error)
+        db_execute_batch(sql).map_err(|error| js_error(&error))
     }
 
     async fn begin(&self) -> Result<Self::Tx<'_>> {
