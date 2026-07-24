@@ -5,8 +5,8 @@ use chia_wallet_sdk::prelude::*;
 use sqlx::{Row, query};
 
 #[cfg(feature = "sqlite")]
-use crate::{AssetKind, CoinKind, DatabaseTx};
-use crate::{Asset, CoinRow, Convert, Database, Result, SqlAccess, SqlExecutor, sql_file};
+use crate::{AssetKind, CoinKind};
+use crate::{Asset, CoinRow, Convert, Database, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NftSortMode {
@@ -336,111 +336,18 @@ impl<E: SqlExecutor> Database<E> {
     }
 }
 
-#[cfg(feature = "sqlite")]
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_nft(&mut self, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
-        let hash = hash.as_ref();
-        let collection_id = coin_info.collection_hash.as_ref();
-        let minter_hash = coin_info.minter_hash.as_deref();
-        let owner_hash = coin_info.owner_hash.as_deref();
-        let metadata = coin_info.metadata.as_slice();
-        let metadata_updater_puzzle_hash = coin_info.metadata_updater_puzzle_hash.as_ref();
-        let royalty_puzzle_hash = coin_info.royalty_puzzle_hash.as_ref();
-        let data_hash = coin_info.data_hash.as_deref();
-        let metadata_hash = coin_info.metadata_hash.as_deref();
-        let license_hash = coin_info.license_hash.as_deref();
-        let edition_number: Option<i64> = coin_info
-            .edition_number
-            .map(TryInto::try_into)
-            .transpose()?;
-        let edition_total: Option<i64> =
-            coin_info.edition_total.map(TryInto::try_into).transpose()?;
-
-        query!(
-            "
-            INSERT OR IGNORE INTO nfts (
-                asset_id, collection_id, minter_hash, owner_hash, metadata, metadata_updater_puzzle_hash,
-                royalty_puzzle_hash, royalty_basis_points, data_hash, metadata_hash, license_hash,
-                edition_number, edition_total
-            )
-            VALUES ((SELECT id FROM assets WHERE hash = ?), (SELECT id FROM collections WHERE hash = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ",
-            hash,
-            collection_id,
-            minter_hash,
-            owner_hash,
-            metadata,
-            metadata_updater_puzzle_hash,
-            royalty_puzzle_hash,
-            coin_info.royalty_basis_points,
-            data_hash,
-            metadata_hash,
-            license_hash,
-            edition_number,
-            edition_total
-        )
-        .execute(&mut *self.tx)
-        .await?;
-
-        Ok(())
+        insert_nft(&mut self.tx, hash, coin_info).await
     }
 
     pub async fn update_nft(&mut self, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
-        let hash = hash.as_ref();
-        let collection_hash = coin_info.collection_hash.as_ref();
-        let minter_hash = coin_info.minter_hash.as_deref();
-        let owner_hash = coin_info.owner_hash.as_deref();
-        let metadata = coin_info.metadata.as_slice();
-        let metadata_updater_puzzle_hash = coin_info.metadata_updater_puzzle_hash.as_ref();
-        let royalty_puzzle_hash = coin_info.royalty_puzzle_hash.as_ref();
-        let data_hash = coin_info.data_hash.as_deref();
-        let metadata_hash = coin_info.metadata_hash.as_deref();
-        let license_hash = coin_info.license_hash.as_deref();
-        let edition_number: Option<i64> = coin_info
-            .edition_number
-            .map(TryInto::try_into)
-            .transpose()?;
-        let edition_total: Option<i64> =
-            coin_info.edition_total.map(TryInto::try_into).transpose()?;
-
-        query!(
-            "
-            UPDATE nfts
-            SET
-                collection_id = (SELECT id FROM collections WHERE hash = ?),
-                minter_hash = ?,
-                owner_hash = ?,
-                metadata = ?,
-                metadata_updater_puzzle_hash = ?,
-                royalty_puzzle_hash = ?,
-                royalty_basis_points = ?,
-                data_hash = ?,
-                metadata_hash = ?,
-                license_hash = ?,
-                edition_number = ?,
-                edition_total = ?
-            WHERE asset_id = (SELECT id FROM assets WHERE hash = ?)
-            ",
-            collection_hash,
-            minter_hash,
-            owner_hash,
-            metadata,
-            metadata_updater_puzzle_hash,
-            royalty_puzzle_hash,
-            coin_info.royalty_basis_points,
-            data_hash,
-            metadata_hash,
-            license_hash,
-            edition_number,
-            edition_total,
-            hash
-        )
-        .execute(&mut *self.tx)
-        .await?;
-
-        Ok(())
+        update_nft(&mut self.tx, hash, coin_info).await
     }
+}
 
+#[cfg(feature = "sqlite")]
+impl DatabaseTx<'_> {
     pub async fn update_nft_data_hash_urls(
         &mut self,
         data_hash: Bytes32,
@@ -502,6 +409,66 @@ impl DatabaseTx<'_> {
 
         Ok(())
     }
+}
+
+async fn insert_nft(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
+    let edition_number: Option<i64> = coin_info
+        .edition_number
+        .map(TryInto::try_into)
+        .transpose()?;
+    let edition_total: Option<i64> = coin_info.edition_total.map(TryInto::try_into).transpose()?;
+
+    conn.execute(
+        sql_file!("nfts/insert_nft.sql"),
+        vec![
+            hash.into(),
+            coin_info.collection_hash.into(),
+            coin_info.minter_hash.into(),
+            coin_info.owner_hash.into(),
+            coin_info.metadata.as_slice().into(),
+            coin_info.metadata_updater_puzzle_hash.into(),
+            coin_info.royalty_puzzle_hash.into(),
+            coin_info.royalty_basis_points.into(),
+            coin_info.data_hash.into(),
+            coin_info.metadata_hash.into(),
+            coin_info.license_hash.into(),
+            edition_number.into(),
+            edition_total.into(),
+        ],
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn update_nft(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
+    let edition_number: Option<i64> = coin_info
+        .edition_number
+        .map(TryInto::try_into)
+        .transpose()?;
+    let edition_total: Option<i64> = coin_info.edition_total.map(TryInto::try_into).transpose()?;
+
+    conn.execute(
+        sql_file!("nfts/update_nft.sql"),
+        vec![
+            coin_info.collection_hash.into(),
+            coin_info.minter_hash.into(),
+            coin_info.owner_hash.into(),
+            coin_info.metadata.as_slice().into(),
+            coin_info.metadata_updater_puzzle_hash.into(),
+            coin_info.royalty_puzzle_hash.into(),
+            coin_info.royalty_basis_points.into(),
+            coin_info.data_hash.into(),
+            coin_info.metadata_hash.into(),
+            coin_info.license_hash.into(),
+            edition_number.into(),
+            edition_total.into(),
+            hash.into(),
+        ],
+    )
+    .await?;
+
+    Ok(())
 }
 
 async fn offer_nft_info(mut conn: impl SqlAccess, hash: Bytes32) -> Result<Option<NftOfferInfo>> {

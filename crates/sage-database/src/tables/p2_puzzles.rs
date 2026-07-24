@@ -65,14 +65,6 @@ pub struct DerivationRow {
 
 #[cfg(feature = "sqlite")]
 impl Database {
-    pub async fn custody_p2_puzzle_hashes(&self) -> Result<Vec<Bytes32>> {
-        custody_p2_puzzle_hashes(self.pool()).await
-    }
-
-    pub async fn is_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_p2_puzzle_hash(self.pool(), puzzle_hash).await
-    }
-
     pub async fn derivations(
         &self,
         is_hardened: bool,
@@ -88,6 +80,14 @@ impl Database {
 }
 
 impl<E: SqlExecutor> Database<E> {
+    pub async fn custody_p2_puzzle_hashes(&self) -> Result<Vec<Bytes32>> {
+        custody_p2_puzzle_hashes(&self.executor).await
+    }
+
+    pub async fn is_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
+        is_p2_puzzle_hash(&self.executor, puzzle_hash).await
+    }
+
     pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
         public_key(&self.executor, p2_puzzle_hash).await
     }
@@ -146,19 +146,6 @@ impl<E: SqlExecutor> Database<E> {
 
 #[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
-    pub async fn is_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_p2_puzzle_hash(&mut *self.tx, puzzle_hash).await
-    }
-
-    pub async fn insert_custody_p2_puzzle(
-        &mut self,
-        p2_puzzle_hash: Bytes32,
-        key: PublicKey,
-        derivation: Derivation,
-    ) -> Result<()> {
-        insert_custody_p2_puzzle(&mut *self.tx, p2_puzzle_hash, key, derivation).await
-    }
-
     pub async fn insert_clawback_p2_puzzle(&mut self, clawback: ClawbackV2) -> Result<()> {
         insert_clawback_p2_puzzle(&mut *self.tx, clawback).await
     }
@@ -173,6 +160,19 @@ impl DatabaseTx<'_> {
 }
 
 impl<E: SqlExecutor> DatabaseTx<'_, E> {
+    pub async fn is_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
+        is_p2_puzzle_hash(&mut self.tx, puzzle_hash).await
+    }
+
+    pub async fn insert_custody_p2_puzzle(
+        &mut self,
+        p2_puzzle_hash: Bytes32,
+        key: PublicKey,
+        derivation: Derivation,
+    ) -> Result<()> {
+        insert_custody_p2_puzzle(&mut self.tx, p2_puzzle_hash, key, derivation).await
+    }
+
     pub async fn custody_p2_puzzle_hash(
         &mut self,
         derivation_index: u32,
@@ -194,13 +194,11 @@ impl<E: SqlExecutor> DatabaseTx<'_, E> {
     }
 }
 
-#[cfg(feature = "sqlite")]
-async fn custody_p2_puzzle_hashes(conn: impl SqliteExecutor<'_>) -> Result<Vec<Bytes32>> {
-    query!("SELECT hash FROM p2_puzzles WHERE kind IN (0, 3)")
-        .fetch_all(conn)
+async fn custody_p2_puzzle_hashes(mut conn: impl SqlAccess) -> Result<Vec<Bytes32>> {
+    conn.fetch_all(sql_file!("p2_puzzles/custody_p2_puzzle_hashes.sql"), vec![])
         .await?
-        .into_iter()
-        .map(|row| row.hash.convert())
+        .iter()
+        .map(|row| row.converted("hash"))
         .collect()
 }
 
@@ -232,17 +230,16 @@ async fn is_custody_p2_puzzle_hash(mut conn: impl SqlAccess, puzzle_hash: Bytes3
         > 0)
 }
 
-#[cfg(feature = "sqlite")]
-async fn is_p2_puzzle_hash(conn: impl SqliteExecutor<'_>, puzzle_hash: Bytes32) -> Result<bool> {
-    let puzzle_hash = puzzle_hash.as_ref();
-
-    Ok(query!(
-        "SELECT COUNT(*) AS count FROM p2_puzzles WHERE hash = ?",
-        puzzle_hash
-    )
-    .fetch_one(conn)
-    .await?
-    .count
+async fn is_p2_puzzle_hash(mut conn: impl SqlAccess, puzzle_hash: Bytes32) -> Result<bool> {
+    Ok(conn
+        .fetch_all(
+            sql_file!("p2_puzzles/is_p2_puzzle_hash.sql"),
+            vec![puzzle_hash.into()],
+        )
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
         > 0)
 }
 
@@ -334,31 +331,22 @@ async fn unused_derivation_index(mut conn: impl SqlAccess, is_hardened: bool) ->
     .convert()
 }
 
-#[cfg(feature = "sqlite")]
 async fn insert_custody_p2_puzzle(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     p2_puzzle_hash: Bytes32,
     key: PublicKey,
     derivation: Derivation,
 ) -> Result<()> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-    let key = key.to_bytes();
-    let key = key.as_ref();
-
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 0);
-
-        INSERT OR IGNORE INTO public_keys (p2_puzzle_id, is_hardened, derivation_index, key)
-        VALUES ((SELECT id FROM p2_puzzles WHERE hash = ?), ?, ?, ?);
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        derivation.is_hardened,
-        derivation.derivation_index,
-        key,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_custody_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.into(),
+            p2_puzzle_hash.into(),
+            derivation.is_hardened.into(),
+            derivation.derivation_index.into(),
+            key.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())

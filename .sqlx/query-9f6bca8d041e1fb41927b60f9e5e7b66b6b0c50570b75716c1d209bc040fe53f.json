@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n    parent_coin_hash, puzzle_hash, amount, created_height, spent_height,\n    (asset_id IS NULL) AS is_asset_unsynced,\n    (spent_height IS NOT NULL AND is_children_synced = FALSE) AS is_children_unsynced\nFROM coins\nWHERE asset_id IS NULL OR (spent_height IS NOT NULL AND is_children_synced = FALSE)\nLIMIT ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "parent_coin_hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "puzzle_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "amount",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_height",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "spent_height",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_asset_unsynced",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_children_unsynced",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9f6bca8d041e1fb41927b60f9e5e7b66b6b0c50570b75716c1d209bc040fe53f"
+}

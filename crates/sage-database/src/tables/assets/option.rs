@@ -7,9 +7,11 @@ use sqlx::{Row, SqliteExecutor, query};
 
 #[cfg(feature = "sqlite")]
 use crate::{
-    AssetKind, CoinKind, DatabaseTx, is_valid_asset_id, puzzle_hash_from_address,
+    AssetKind, CoinKind, is_valid_asset_id, puzzle_hash_from_address,
 };
-use crate::{Asset, CoinRow, Convert, Database, Result, SqlAccess, SqlExecutor, sql_file};
+use crate::{
+    Asset, CoinRow, Convert, Database, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OptionSortMode {
@@ -261,39 +263,30 @@ impl<E: SqlExecutor> Database<E> {
     }
 }
 
-#[cfg(feature = "sqlite")]
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_option(&mut self, hash: Bytes32, coin_info: &OptionCoinInfo) -> Result<()> {
-        let hash = hash.as_ref();
-        let underlying_coin_hash = coin_info.underlying_coin_hash.as_ref();
-        let underlying_delegated_puzzle_hash = coin_info.underlying_delegated_puzzle_hash.as_ref();
-        let strike_asset_hash = coin_info.strike_asset_hash.as_ref();
-        let strike_amount = coin_info.strike_amount.to_be_bytes().to_vec();
-
-        query!(
-            "
-            INSERT OR IGNORE INTO options (
-                asset_id, underlying_coin_id, underlying_delegated_puzzle_hash, strike_asset_id, strike_amount
-            )
-            VALUES (
-                (SELECT id FROM assets WHERE hash = ?),
-                (SELECT id FROM coins WHERE hash = ?),
-                ?,
-                (SELECT id FROM assets WHERE hash = ?),
-                ?
-            )
-            ",
-            hash,
-            underlying_coin_hash,
-            underlying_delegated_puzzle_hash,
-            strike_asset_hash,
-            strike_amount
-        )
-        .execute(&mut *self.tx)
-        .await?;
-
-        Ok(())
+        insert_option(&mut self.tx, hash, coin_info).await
     }
+}
+
+async fn insert_option(
+    mut conn: impl SqlAccess,
+    hash: Bytes32,
+    coin_info: &OptionCoinInfo,
+) -> Result<()> {
+    conn.execute(
+        sql_file!("options/insert_option.sql"),
+        vec![
+            hash.into(),
+            coin_info.underlying_coin_hash.into(),
+            coin_info.underlying_delegated_puzzle_hash.into(),
+            coin_info.strike_asset_hash.into(),
+            coin_info.strike_amount.to_be_bytes().to_vec().into(),
+        ],
+    )
+    .await?;
+
+    Ok(())
 }
 
 async fn option_underlying(

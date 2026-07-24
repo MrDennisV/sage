@@ -1,7 +1,13 @@
-use chia_wallet_sdk::prelude::*;
-use sqlx::{SqliteConnection, SqliteExecutor, query};
+use chia_bls::Signature;
+#[cfg(feature = "sqlite")]
+use chia_protocol::Coin;
+use chia_protocol::{Bytes32, CoinSpend};
+#[cfg(feature = "sqlite")]
+use sqlx::{SqliteExecutor, query};
 
-use crate::{Convert, Database, DatabaseTx, Result};
+#[cfg(feature = "sqlite")]
+use crate::{Convert, Database};
+use crate::{DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
 
 #[derive(Debug, Clone)]
 pub struct MempoolItem {
@@ -11,6 +17,7 @@ pub struct MempoolItem {
     pub submitted_timestamp: Option<u64>,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn mempool_items_to_submit(
         &self,
@@ -33,14 +40,14 @@ impl Database {
     }
 }
 
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_mempool_item(
         &mut self,
         hash: Bytes32,
         aggregated_signature: Signature,
         fee: u64,
     ) -> Result<()> {
-        insert_mempool_item(&mut *self.tx, hash, aggregated_signature, fee).await
+        insert_mempool_item(&mut self.tx, hash, aggregated_signature, fee).await
     }
 
     pub async fn insert_mempool_coin(
@@ -50,7 +57,7 @@ impl DatabaseTx<'_> {
         is_input: bool,
         is_output: bool,
     ) -> Result<()> {
-        insert_mempool_coin(&mut *self.tx, mempool_item_id, coin_id, is_input, is_output).await
+        insert_mempool_coin(&mut self.tx, mempool_item_id, coin_id, is_input, is_output).await
     }
 
     pub async fn insert_mempool_spend(
@@ -59,15 +66,15 @@ impl DatabaseTx<'_> {
         coin_spend: CoinSpend,
         seq: usize,
     ) -> Result<()> {
-        insert_mempool_spend(&mut *self.tx, mempool_item_id, coin_spend, seq).await
+        insert_mempool_spend(&mut self.tx, mempool_item_id, coin_spend, seq).await
     }
 
     pub async fn mempool_items_for_input(&mut self, coin_id: Bytes32) -> Result<Vec<Bytes32>> {
-        mempool_items_for_input(&mut *self.tx, coin_id).await
+        mempool_items_for_input(&mut self.tx, coin_id).await
     }
 
     pub async fn mempool_items_for_output(&mut self, coin_id: Bytes32) -> Result<Vec<Bytes32>> {
-        mempool_items_for_output(&mut *self.tx, coin_id).await
+        mempool_items_for_output(&mut self.tx, coin_id).await
     }
 
     pub async fn remove_mempool_item(&mut self, mempool_item_id: Bytes32) -> Result<()> {
@@ -76,92 +83,73 @@ impl DatabaseTx<'_> {
 }
 
 async fn insert_mempool_item(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     hash: Bytes32,
     aggregated_signature: Signature,
     fee: u64,
 ) -> Result<()> {
-    let hash = hash.as_ref();
-    let aggregated_signature = aggregated_signature.to_bytes();
-    let aggregated_signature = aggregated_signature.as_ref();
-    let fee = fee.to_be_bytes().to_vec();
-
-    query!(
-        "
-        INSERT OR IGNORE INTO mempool_items (hash, aggregated_signature, fee) VALUES (?, ?, ?)
-        ",
-        hash,
-        aggregated_signature,
-        fee
+    conn.execute(
+        sql_file!("mempool_items/insert_mempool_item.sql"),
+        vec![
+            hash.into(),
+            aggregated_signature.into(),
+            fee.to_be_bytes().to_vec().into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
 async fn insert_mempool_coin(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     mempool_item_id: Bytes32,
     coin_id: Bytes32,
     is_input: bool,
     is_output: bool,
 ) -> Result<()> {
-    let mempool_item_id = mempool_item_id.as_ref();
-    let coin_id = coin_id.as_ref();
-
-    query!(
-        "
-        INSERT OR IGNORE INTO mempool_coins (mempool_item_id, coin_id, is_input, is_output)
-        VALUES ((SELECT id FROM mempool_items WHERE hash = ?), (SELECT id FROM coins WHERE hash = ?), ?, ?)
-        ",
-        mempool_item_id,
-        coin_id,
-        is_input,
-        is_output
+    conn.execute(
+        sql_file!("mempool_items/insert_mempool_coin.sql"),
+        vec![
+            mempool_item_id.into(),
+            coin_id.into(),
+            is_input.into(),
+            is_output.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
 async fn insert_mempool_spend(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     mempool_item_id: Bytes32,
     coin_spend: CoinSpend,
     seq: usize,
 ) -> Result<()> {
-    let mempool_item_id = mempool_item_id.as_ref();
     let coin_id = coin_spend.coin.coin_id();
-    let coin_id = coin_id.as_ref();
-    let parent_coin_hash = coin_spend.coin.parent_coin_info.as_ref();
-    let puzzle_hash = coin_spend.coin.puzzle_hash.as_ref();
-    let amount = coin_spend.coin.amount.to_be_bytes().to_vec();
-    let puzzle_reveal = coin_spend.puzzle_reveal.into_bytes();
-    let solution = coin_spend.solution.into_bytes();
     let seq: i64 = seq.try_into()?;
 
-    query!(
-        "
-        INSERT OR IGNORE INTO mempool_spends (mempool_item_id, coin_hash, parent_coin_hash, puzzle_hash, amount, puzzle_reveal, solution, seq)
-        VALUES ((SELECT id FROM mempool_items WHERE hash = ?), ?, ?, ?, ?, ?, ?, ?)
-        ",
-        mempool_item_id,
-        coin_id,
-        parent_coin_hash,
-        puzzle_hash,
-        amount,
-        puzzle_reveal,
-        solution,
-        seq
+    conn.execute(
+        sql_file!("mempool_items/insert_mempool_spend.sql"),
+        vec![
+            mempool_item_id.into(),
+            coin_id.into(),
+            coin_spend.coin.parent_coin_info.into(),
+            coin_spend.coin.puzzle_hash.into(),
+            coin_spend.coin.amount.to_be_bytes().to_vec().into(),
+            coin_spend.puzzle_reveal.into_bytes().into(),
+            coin_spend.solution.into_bytes().into(),
+            seq.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn mempool_items_to_submit(
     conn: impl SqliteExecutor<'_>,
     check_every_seconds: i64,
@@ -191,6 +179,7 @@ async fn mempool_items_to_submit(
     .collect()
 }
 
+#[cfg(feature = "sqlite")]
 async fn mempool_coin_spends(
     conn: impl SqliteExecutor<'_>,
     mempool_item_id: Bytes32,
@@ -225,74 +214,50 @@ async fn mempool_coin_spends(
 }
 
 async fn mempool_items_for_input(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     coin_id: Bytes32,
 ) -> Result<Vec<Bytes32>> {
-    let coin_id = coin_id.as_ref();
-
-    query!(
-        "
-        SELECT mempool_items.hash AS mempool_item_hash 
-        FROM mempool_items
-        INNER JOIN mempool_coins ON mempool_coins.mempool_item_id = mempool_items.id
-        INNER JOIN coins ON coins.hash = ?
-        WHERE mempool_coins.is_input = TRUE
-        ",
-        coin_id
+    conn.fetch_all(
+        sql_file!("mempool_items/mempool_items_for_input.sql"),
+        vec![coin_id.into()],
     )
-    .fetch_all(conn)
     .await?
-    .into_iter()
-    .map(|row| row.mempool_item_hash.convert())
+    .iter()
+    .map(|row| row.converted("mempool_item_hash"))
     .collect()
 }
 
 async fn mempool_items_for_output(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     coin_id: Bytes32,
 ) -> Result<Vec<Bytes32>> {
-    let coin_id = coin_id.as_ref();
-
-    query!(
-        "
-        SELECT mempool_items.hash AS mempool_item_hash 
-        FROM mempool_items
-        INNER JOIN mempool_coins ON mempool_coins.mempool_item_id = mempool_items.id
-        INNER JOIN coins ON coins.hash = ?
-        WHERE mempool_coins.is_output = TRUE
-        ",
-        coin_id
+    conn.fetch_all(
+        sql_file!("mempool_items/mempool_items_for_output.sql"),
+        vec![coin_id.into()],
     )
-    .fetch_all(conn)
     .await?
-    .into_iter()
-    .map(|row| row.mempool_item_hash.convert())
+    .iter()
+    .map(|row| row.converted("mempool_item_hash"))
     .collect()
 }
 
-async fn remove_mempool_item(conn: &mut SqliteConnection, mempool_item_id: Bytes32) -> Result<()> {
-    let mempool_item_id = mempool_item_id.as_ref();
-
-    query!(
-        "
-        DELETE FROM coins WHERE created_height IS NULL AND id IN (
-            SELECT coin_id FROM mempool_coins
-            INNER JOIN mempool_items ON mempool_items.id = mempool_coins.mempool_item_id
-            WHERE hash = ? AND is_output = TRUE
-        )
-        ",
-        mempool_item_id
+async fn remove_mempool_item(mut conn: impl SqlAccess, mempool_item_id: Bytes32) -> Result<()> {
+    conn.execute(
+        sql_file!("mempool_items/remove_mempool_coins.sql"),
+        vec![mempool_item_id.into()],
     )
-    .execute(&mut *conn)
     .await?;
 
-    query!("DELETE FROM mempool_items WHERE hash = ?", mempool_item_id)
-        .execute(conn)
-        .await?;
+    conn.execute(
+        sql_file!("mempool_items/remove_mempool_item.sql"),
+        vec![mempool_item_id.into()],
+    )
+    .await?;
 
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn update_mempool_item_time(
     conn: impl SqliteExecutor<'_>,
     mempool_item_id: Bytes32,
@@ -309,6 +274,7 @@ async fn update_mempool_item_time(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn mempool_items(conn: impl SqliteExecutor<'_>) -> Result<Vec<MempoolItem>> {
     query!(
         "

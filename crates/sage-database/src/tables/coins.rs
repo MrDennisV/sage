@@ -4,11 +4,9 @@ use chia_sdk_driver::{Cat, CatInfo, OptionContract, OptionInfo};
 #[cfg(feature = "sqlite")]
 use sqlx::{Row, SqliteExecutor, query};
 
-#[cfg(feature = "sqlite")]
-use crate::DatabaseTx;
 use crate::{
-    AssetKind, Convert, Database, DatabaseError, Result, SerializedDid, SerializedDidInfo,
-    SerializedNft, SerializedNftInfo, SqlAccess, SqlExecutor, SqlRow, sql_file,
+    AssetKind, Convert, Database, DatabaseError, DatabaseTx, Result, SerializedDid,
+    SerializedDidInfo, SerializedNft, SerializedNftInfo, SqlAccess, SqlExecutor, SqlRow, sql_file,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -113,23 +111,6 @@ impl Database {
         synced_coin_count(self.pool()).await
     }
 
-    pub async fn unsynced_coins(&self, limit: usize) -> Result<Vec<UnsyncedCoin>> {
-        unsynced_coins(self.pool(), limit).await
-    }
-
-    pub async fn update_coin(
-        &self,
-        coin_id: Bytes32,
-        asset_hash: Bytes32,
-        p2_puzzle_hash: Bytes32,
-    ) -> Result<()> {
-        update_coin(self.pool(), coin_id, asset_hash, p2_puzzle_hash).await
-    }
-
-    pub async fn subscription_coin_ids(&self) -> Result<Vec<Bytes32>> {
-        subscription_coin_ids(self.pool()).await
-    }
-
     pub async fn xch_balance(&self) -> Result<u128> {
         token_balance(self.pool(), Bytes32::default()).await
     }
@@ -160,6 +141,23 @@ impl Database {
 }
 
 impl<E: SqlExecutor> Database<E> {
+    pub async fn unsynced_coins(&self, limit: usize) -> Result<Vec<UnsyncedCoin>> {
+        unsynced_coins(&self.executor, limit).await
+    }
+
+    pub async fn update_coin(
+        &self,
+        coin_id: Bytes32,
+        asset_hash: Bytes32,
+        p2_puzzle_hash: Bytes32,
+    ) -> Result<()> {
+        update_coin(&self.executor, coin_id, asset_hash, p2_puzzle_hash).await
+    }
+
+    pub async fn subscription_coin_ids(&self) -> Result<Vec<Bytes32>> {
+        subscription_coin_ids(&self.executor).await
+    }
+
     pub async fn selectable_xch_coins(&self) -> Result<Vec<Coin>> {
         selectable_xch_coins(&self.executor).await
     }
@@ -211,12 +209,21 @@ impl<E: SqlExecutor> Database<E> {
 
 #[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
+    pub async fn set_transaction_children_unsynced(
+        &mut self,
+        mempool_item_id: Bytes32,
+    ) -> Result<()> {
+        set_transaction_children_unsynced(&mut *self.tx, mempool_item_id).await
+    }
+}
+
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_coin(&mut self, coin_state: CoinState) -> Result<()> {
-        insert_coin(&mut *self.tx, coin_state).await
+        insert_coin(&mut self.tx, coin_state).await
     }
 
     pub async fn is_known_coin(&mut self, coin_id: Bytes32) -> Result<bool> {
-        is_known_coin(&mut *self.tx, coin_id).await
+        is_known_coin(&mut self.tx, coin_id).await
     }
 
     pub async fn update_coin(
@@ -225,22 +232,15 @@ impl DatabaseTx<'_> {
         asset_hash: Bytes32,
         p2_puzzle_hash: Bytes32,
     ) -> Result<()> {
-        update_coin(&mut *self.tx, coin_id, asset_hash, p2_puzzle_hash).await
+        update_coin(&mut self.tx, coin_id, asset_hash, p2_puzzle_hash).await
     }
 
     pub async fn set_children_synced(&mut self, coin_id: Bytes32) -> Result<()> {
-        set_children_synced(&mut *self.tx, coin_id).await
-    }
-
-    pub async fn set_transaction_children_unsynced(
-        &mut self,
-        mempool_item_id: Bytes32,
-    ) -> Result<()> {
-        set_transaction_children_unsynced(&mut *self.tx, mempool_item_id).await
+        set_children_synced(&mut self.tx, coin_id).await
     }
 
     pub async fn delete_coin(&mut self, coin_id: Bytes32) -> Result<()> {
-        delete_coin(&mut *self.tx, coin_id).await
+        delete_coin(&mut self.tx, coin_id).await
     }
 
     pub async fn insert_lineage_proof(
@@ -248,7 +248,7 @@ impl DatabaseTx<'_> {
         coin_id: Bytes32,
         lineage_proof: LineageProof,
     ) -> Result<()> {
-        insert_lineage_proof(&mut *self.tx, coin_id, lineage_proof).await
+        insert_lineage_proof(&mut self.tx, coin_id, lineage_proof).await
     }
 }
 
@@ -278,136 +278,84 @@ async fn are_coins_spendable(conn: impl SqliteExecutor<'_>, coin_ids: &[String])
     Ok(count == coin_ids.len() as i64)
 }
 
-#[cfg(feature = "sqlite")]
-async fn insert_coin(conn: impl SqliteExecutor<'_>, coin_state: CoinState) -> Result<()> {
-    let hash = coin_state.coin.coin_id();
-    let hash = hash.as_ref();
-    let parent_coin_hash = coin_state.coin.parent_coin_info.as_ref();
-    let puzzle_hash = coin_state.coin.puzzle_hash.as_ref();
-    let amount = coin_state.coin.amount.to_be_bytes().to_vec();
-
-    query!(
-        "
-        INSERT INTO coins
-            (hash, parent_coin_hash, puzzle_hash, amount, created_height, spent_height)
-        VALUES
-            (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(hash) DO UPDATE SET
-            created_height = excluded.created_height,
-            spent_height = excluded.spent_height
-        ",
-        hash,
-        parent_coin_hash,
-        puzzle_hash,
-        amount,
-        coin_state.created_height,
-        coin_state.spent_height,
+async fn insert_coin(mut conn: impl SqlAccess, coin_state: CoinState) -> Result<()> {
+    conn.execute(
+        sql_file!("coins/insert_coin.sql"),
+        vec![
+            coin_state.coin.coin_id().into(),
+            coin_state.coin.parent_coin_info.into(),
+            coin_state.coin.puzzle_hash.into(),
+            coin_state.coin.amount.to_be_bytes().to_vec().into(),
+            coin_state.created_height.into(),
+            coin_state.spent_height.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn is_known_coin(conn: impl SqliteExecutor<'_>, coin_id: Bytes32) -> Result<bool> {
-    let coin_id_ref = coin_id.as_ref();
-
-    let row = query!(
-        "SELECT COUNT(*) AS count FROM coins WHERE hash = ?",
-        coin_id_ref
-    )
-    .fetch_one(conn)
-    .await?;
-
-    Ok(row.count > 0)
+async fn is_known_coin(mut conn: impl SqlAccess, coin_id: Bytes32) -> Result<bool> {
+    Ok(conn
+        .fetch_all(sql_file!("coins/is_known_coin.sql"), vec![coin_id.into()])
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
+        > 0)
 }
 
-#[cfg(feature = "sqlite")]
-async fn unsynced_coins(conn: impl SqliteExecutor<'_>, limit: usize) -> Result<Vec<UnsyncedCoin>> {
+async fn unsynced_coins(mut conn: impl SqlAccess, limit: usize) -> Result<Vec<UnsyncedCoin>> {
     let limit = i64::try_from(limit)?;
 
-    query!(
-        "
-        SELECT
-            parent_coin_hash, puzzle_hash, amount, created_height, spent_height,
-            (asset_id IS NULL) AS is_asset_unsynced,
-            (spent_height IS NOT NULL AND is_children_synced = FALSE) AS is_children_unsynced
-        FROM coins
-        WHERE asset_id IS NULL OR (spent_height IS NOT NULL AND is_children_synced = FALSE)
-        LIMIT ?
-        ",
-        limit
-    )
-    .fetch_all(conn)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(UnsyncedCoin {
-            coin_state: CoinState::new(
-                Coin::new(
-                    row.parent_coin_hash.convert()?,
-                    row.puzzle_hash.convert()?,
-                    row.amount.convert()?,
+    conn.fetch_all(sql_file!("coins/unsynced_coins.sql"), vec![limit.into()])
+        .await?
+        .iter()
+        .map(|row| {
+            Ok(UnsyncedCoin {
+                coin_state: CoinState::new(
+                    Coin::new(
+                        row.converted("parent_coin_hash")?,
+                        row.converted("puzzle_hash")?,
+                        row.converted("amount")?,
+                    ),
+                    row.opt_i64("spent_height")?.convert()?,
+                    row.opt_i64("created_height")?.convert()?,
                 ),
-                row.spent_height.convert()?,
-                row.created_height.convert()?,
-            ),
-            is_asset_unsynced: row.is_asset_unsynced != 0,
-            is_children_unsynced: row.is_children_unsynced != 0,
+                is_asset_unsynced: row.i64("is_asset_unsynced")? != 0,
+                is_children_unsynced: row.i64("is_children_unsynced")? != 0,
+            })
         })
-    })
-    .collect()
+        .collect()
 }
 
-#[cfg(feature = "sqlite")]
-async fn delete_coin(conn: impl SqliteExecutor<'_>, coin_id: Bytes32) -> Result<()> {
-    let coin_id_ref = coin_id.as_ref();
-
-    query!("DELETE FROM coins WHERE hash = ?", coin_id_ref)
-        .execute(conn)
+async fn delete_coin(mut conn: impl SqlAccess, coin_id: Bytes32) -> Result<()> {
+    conn.execute(sql_file!("coins/delete_coin.sql"), vec![coin_id.into()])
         .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
 async fn update_coin(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     coin_id: Bytes32,
     asset_hash: Bytes32,
     p2_puzzle_hash: Bytes32,
 ) -> Result<()> {
-    let coin_id = coin_id.as_ref();
-    let asset_hash = asset_hash.as_ref();
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    query!(
-        "
-        UPDATE coins SET
-            asset_id = (SELECT id FROM assets WHERE hash = ?),
-            p2_puzzle_id = (SELECT id FROM p2_puzzles WHERE hash = ?)
-        WHERE hash = ?
-        ",
-        asset_hash,
-        p2_puzzle_hash,
-        coin_id,
+    conn.execute(
+        sql_file!("coins/update_coin.sql"),
+        vec![asset_hash.into(), p2_puzzle_hash.into(), coin_id.into()],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn set_children_synced(conn: impl SqliteExecutor<'_>, coin_id: Bytes32) -> Result<()> {
-    let coin_id = coin_id.as_ref();
-
-    query!(
-        "UPDATE coins SET is_children_synced = TRUE WHERE hash = ?",
-        coin_id
+async fn set_children_synced(mut conn: impl SqlAccess, coin_id: Bytes32) -> Result<()> {
+    conn.execute(
+        sql_file!("coins/set_children_synced.sql"),
+        vec![coin_id.into()],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
@@ -436,48 +384,31 @@ async fn set_transaction_children_unsynced(
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
 async fn insert_lineage_proof(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     coin_id: Bytes32,
     lineage_proof: LineageProof,
 ) -> Result<()> {
-    let coin_id = coin_id.as_ref();
-    let parent_parent_coin_hash = lineage_proof.parent_parent_coin_info.as_ref();
-    let parent_inner_puzzle_hash = lineage_proof.parent_inner_puzzle_hash.as_ref();
-    let parent_amount = lineage_proof.parent_amount.to_be_bytes().to_vec();
-
-    query!(
-        "INSERT OR IGNORE INTO lineage_proofs
-            (coin_id, parent_parent_coin_hash, parent_inner_puzzle_hash, parent_amount)
-        VALUES
-            ((SELECT id FROM coins WHERE hash = ?), ?, ?, ?)
-        ",
-        coin_id,
-        parent_parent_coin_hash,
-        parent_inner_puzzle_hash,
-        parent_amount,
+    conn.execute(
+        sql_file!("coins/insert_lineage_proof.sql"),
+        vec![
+            coin_id.into(),
+            lineage_proof.parent_parent_coin_info.into(),
+            lineage_proof.parent_inner_puzzle_hash.into(),
+            lineage_proof.parent_amount.to_be_bytes().to_vec().into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn subscription_coin_ids(conn: impl SqliteExecutor<'_>) -> Result<Vec<Bytes32>> {
-    query!(
-        "
-        SELECT coin_hash FROM wallet_coins
-        WHERE spent_height IS NULL
-        AND (asset_id != 0 OR p2_puzzle_kind != 0)
-        "
-    )
-    .fetch_all(conn)
-    .await?
-    .into_iter()
-    .map(|row| row.coin_hash.convert())
-    .collect()
+async fn subscription_coin_ids(mut conn: impl SqlAccess) -> Result<Vec<Bytes32>> {
+    conn.fetch_all(sql_file!("coins/subscription_coin_ids.sql"), vec![])
+        .await?
+        .iter()
+        .map(|row| row.converted("coin_hash"))
+        .collect()
 }
 
 #[cfg(feature = "sqlite")]

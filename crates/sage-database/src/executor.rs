@@ -1,4 +1,4 @@
-use chia_bls::PublicKey;
+use chia_bls::{PublicKey, Signature};
 use chia_protocol::Bytes32;
 
 use crate::{Convert, DatabaseError, Result};
@@ -34,6 +34,18 @@ impl From<i64> for SqlValue {
 
 impl From<u32> for SqlValue {
     fn from(value: u32) -> Self {
+        Self::Int(i64::from(value))
+    }
+}
+
+impl From<u16> for SqlValue {
+    fn from(value: u16) -> Self {
+        Self::Int(i64::from(value))
+    }
+}
+
+impl From<u8> for SqlValue {
+    fn from(value: u8) -> Self {
         Self::Int(i64::from(value))
     }
 }
@@ -76,6 +88,12 @@ impl From<Bytes32> for SqlValue {
 
 impl From<PublicKey> for SqlValue {
     fn from(value: PublicKey) -> Self {
+        Self::Blob(value.to_bytes().to_vec())
+    }
+}
+
+impl From<Signature> for SqlValue {
+    fn from(value: Signature) -> Self {
         Self::Blob(value.to_bytes().to_vec())
     }
 }

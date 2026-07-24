@@ -1,7 +1,10 @@
-use chia_wallet_sdk::prelude::*;
+use chia_protocol::Bytes32;
+#[cfg(feature = "sqlite")]
 use sqlx::{SqliteExecutor, query};
 
-use crate::{Convert, Database, DatabaseTx, Result};
+#[cfg(feature = "sqlite")]
+use crate::Convert;
+use crate::{Database, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
 
 #[derive(Debug, Clone)]
 pub struct FileUri {
@@ -37,6 +40,7 @@ pub struct ResizedImage {
     pub mime_type: Option<String>,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn candidates_for_download(
         &self,
@@ -45,14 +49,6 @@ impl Database {
         limit: u32,
     ) -> Result<Vec<FileUri>> {
         candidates_for_download(self.pool(), check_every_seconds, max_failed_attempts, limit).await
-    }
-
-    pub async fn thumbnail(&self, hash: Bytes32) -> Result<Option<ResizedImage>> {
-        resized_image(self.pool(), hash, ResizedImageKind::Thumbnail).await
-    }
-
-    pub async fn icon(&self, hash: Bytes32) -> Result<Option<ResizedImage>> {
-        resized_image(self.pool(), hash, ResizedImageKind::Icon).await
     }
 
     pub async fn full_file_data(&self, hash: Bytes32) -> Result<Option<FileData>> {
@@ -68,19 +64,36 @@ impl Database {
     }
 }
 
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> Database<E> {
+    pub async fn thumbnail(&self, hash: Bytes32) -> Result<Option<ResizedImage>> {
+        resized_image(&self.executor, hash, ResizedImageKind::Thumbnail).await
+    }
+
+    pub async fn icon(&self, hash: Bytes32) -> Result<Option<ResizedImage>> {
+        resized_image(&self.executor, hash, ResizedImageKind::Icon).await
+    }
+}
+
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_file(&mut self, hash: Bytes32) -> Result<()> {
-        insert_file(&mut *self.tx, hash).await
+        insert_file(&mut self.tx, hash).await
     }
 
     pub async fn insert_file_uri(&mut self, hash: Bytes32, uri: String) -> Result<()> {
-        insert_file_uri(&mut *self.tx, hash, uri).await
+        insert_file_uri(&mut self.tx, hash, uri).await
     }
 
     pub async fn file_data(&mut self, hash: Bytes32) -> Result<Option<Vec<u8>>> {
-        file_data(&mut *self.tx, hash).await
+        file_data(&mut self.tx, hash).await
     }
 
+    pub async fn icon(&mut self, hash: Bytes32) -> Result<Option<ResizedImage>> {
+        resized_image(&mut self.tx, hash, ResizedImageKind::Icon).await
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl DatabaseTx<'_> {
     pub async fn update_checked_uri(&mut self, hash: Bytes32, uri: String) -> Result<()> {
         update_checked_uri(&mut *self.tx, hash, uri).await
     }
@@ -108,10 +121,6 @@ impl DatabaseTx<'_> {
         insert_resized_image(&mut *self.tx, file_hash, kind, data).await
     }
 
-    pub async fn icon(&mut self, hash: Bytes32) -> Result<Option<ResizedImage>> {
-        resized_image(&mut *self.tx, hash, ResizedImageKind::Icon).await
-    }
-
     pub async fn nfts_with_metadata_hash(&mut self, hash: Bytes32) -> Result<Vec<UpdateableNft>> {
         nfts_with_metadata_hash(&mut *self.tx, hash).await
     }
@@ -125,40 +134,34 @@ impl DatabaseTx<'_> {
     }
 }
 
-async fn insert_file(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<()> {
-    let hash = hash.as_ref();
-
-    query!("INSERT OR IGNORE INTO files (hash) VALUES (?)", hash)
-        .execute(conn)
+async fn insert_file(mut conn: impl SqlAccess, hash: Bytes32) -> Result<()> {
+    conn.execute(sql_file!("files/insert_file.sql"), vec![hash.into()])
         .await?;
 
     Ok(())
 }
 
-async fn insert_file_uri(conn: impl SqliteExecutor<'_>, hash: Bytes32, uri: String) -> Result<()> {
-    let hash = hash.as_ref();
-
-    query!(
-        "INSERT OR IGNORE INTO file_uris (file_id, uri) VALUES ((SELECT id FROM files WHERE hash = ?), ?)",
-        hash,
-        uri
+async fn insert_file_uri(mut conn: impl SqlAccess, hash: Bytes32, uri: String) -> Result<()> {
+    conn.execute(
+        sql_file!("files/insert_file_uri.sql"),
+        vec![hash.into(), uri.into()],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-async fn file_data(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<Option<Vec<u8>>> {
-    let hash = hash.as_ref();
-
-    let row = query!("SELECT data FROM files WHERE hash = ?", hash)
-        .fetch_optional(conn)
-        .await?;
-
-    Ok(row.and_then(|row| row.data))
+async fn file_data(mut conn: impl SqlAccess, hash: Bytes32) -> Result<Option<Vec<u8>>> {
+    Ok(conn
+        .fetch_all(sql_file!("files/file_data.sql"), vec![hash.into()])
+        .await?
+        .first()
+        .map(|row| row.opt_blob("data"))
+        .transpose()?
+        .flatten())
 }
 
+#[cfg(feature = "sqlite")]
 async fn full_file_data(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<Option<FileData>> {
     let hash = hash.as_ref();
 
@@ -180,6 +183,7 @@ async fn full_file_data(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<
     .transpose()
 }
 
+#[cfg(feature = "sqlite")]
 async fn candidates_for_download(
     conn: impl SqliteExecutor<'_>,
     check_every_seconds: i64,
@@ -214,6 +218,7 @@ async fn candidates_for_download(
     .collect()
 }
 
+#[cfg(feature = "sqlite")]
 async fn update_failed_uri(
     conn: impl SqliteExecutor<'_>,
     hash: Bytes32,
@@ -236,6 +241,7 @@ async fn update_failed_uri(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn update_checked_uri(
     conn: impl SqliteExecutor<'_>,
     hash: Bytes32,
@@ -258,6 +264,7 @@ async fn update_checked_uri(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn update_file(
     conn: impl SqliteExecutor<'_>,
     hash: Bytes32,
@@ -284,6 +291,7 @@ async fn update_file(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn nfts_with_metadata_hash(
     conn: impl SqliteExecutor<'_>,
     hash: Bytes32,
@@ -304,6 +312,7 @@ async fn nfts_with_metadata_hash(
     .collect()
 }
 
+#[cfg(feature = "sqlite")]
 async fn insert_resized_image(
     conn: impl SqliteExecutor<'_>,
     file_hash: Bytes32,
@@ -326,30 +335,26 @@ async fn insert_resized_image(
 }
 
 async fn resized_image(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     hash: Bytes32,
     kind: ResizedImageKind,
 ) -> Result<Option<ResizedImage>> {
-    let hash = hash.as_ref();
-    let kind = kind as i64;
-
-    let row = query!(
-        "SELECT resized_images.data, mime_type
-        FROM resized_images 
-        INNER JOIN files ON files.id = resized_images.file_id
-        WHERE files.hash = ? AND kind = ?",
-        hash,
-        kind
+    conn.fetch_all(
+        sql_file!("files/resized_image.sql"),
+        vec![hash.into(), (kind as i64).into()],
     )
-    .fetch_optional(conn)
-    .await?;
-
-    Ok(row.map(|row| ResizedImage {
-        data: row.data,
-        mime_type: row.mime_type,
-    }))
+    .await?
+    .first()
+    .map(|row| {
+        Ok(ResizedImage {
+            data: row.blob("data")?,
+            mime_type: row.opt_text("mime_type")?,
+        })
+    })
+    .transpose()
 }
 
+#[cfg(feature = "sqlite")]
 async fn delete_file_data(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<()> {
     let hash = hash.as_ref();
 
@@ -360,6 +365,7 @@ async fn delete_file_data(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Resul
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn set_uri_unchecked(conn: impl SqliteExecutor<'_>, uri: String) -> Result<()> {
     query!(
         "UPDATE file_uris 
@@ -374,6 +380,7 @@ async fn set_uri_unchecked(conn: impl SqliteExecutor<'_>, uri: String) -> Result
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn checked_files(conn: impl SqliteExecutor<'_>) -> Result<u64> {
     query!(
         "
@@ -392,6 +399,7 @@ async fn checked_files(conn: impl SqliteExecutor<'_>) -> Result<u64> {
     .map_err(crate::DatabaseError::PrecisionLost)
 }
 
+#[cfg(feature = "sqlite")]
 async fn total_files(conn: impl SqliteExecutor<'_>) -> Result<u64> {
     query!(
         "

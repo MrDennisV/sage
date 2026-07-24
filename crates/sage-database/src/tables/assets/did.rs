@@ -5,8 +5,8 @@ use chia_wallet_sdk::prelude::*;
 use sqlx::query;
 
 #[cfg(feature = "sqlite")]
-use crate::{AssetKind, CoinKind, Convert, Database, DatabaseTx, Result};
-use crate::{Asset, CoinRow};
+use crate::{AssetKind, CoinKind, Convert, Database};
+use crate::{Asset, CoinRow, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
 
 #[derive(Debug, Clone)]
 pub struct DidCoinInfo {
@@ -84,55 +84,46 @@ impl Database {
     }
 }
 
-#[cfg(feature = "sqlite")]
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_did(&mut self, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
-        let hash = hash.as_ref();
-        let metadata = coin_info.metadata.as_slice();
-        let recovery_list_hash = coin_info.recovery_list_hash.as_deref();
-        let num_verifications_required: i64 = coin_info.num_verifications_required.try_into()?;
-
-        query!(
-            "
-            INSERT OR IGNORE INTO dids (
-                asset_id, metadata, recovery_list_hash, num_verifications_required
-            )
-            VALUES ((SELECT id FROM assets WHERE hash = ?), ?, ?, ?)
-            ",
-            hash,
-            metadata,
-            recovery_list_hash,
-            num_verifications_required
-        )
-        .execute(&mut *self.tx)
-        .await?;
-
-        Ok(())
+        insert_did(&mut self.tx, hash, coin_info).await
     }
 
     pub async fn update_did(&mut self, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
-        let hash = hash.as_ref();
-        let metadata = coin_info.metadata.as_slice();
-        let recovery_list_hash = coin_info.recovery_list_hash.as_deref();
-        let num_verifications_required: i64 = coin_info.num_verifications_required.try_into()?;
-
-        query!(
-            "
-            UPDATE dids
-            SET
-                metadata = ?,
-                recovery_list_hash = ?,
-                num_verifications_required = ?
-            WHERE asset_id = (SELECT id FROM assets WHERE hash = ?)
-            ",
-            metadata,
-            recovery_list_hash,
-            num_verifications_required,
-            hash
-        )
-        .execute(&mut *self.tx)
-        .await?;
-
-        Ok(())
+        update_did(&mut self.tx, hash, coin_info).await
     }
+}
+
+async fn insert_did(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
+    let num_verifications_required: i64 = coin_info.num_verifications_required.try_into()?;
+
+    conn.execute(
+        sql_file!("dids/insert_did.sql"),
+        vec![
+            hash.into(),
+            coin_info.metadata.as_slice().into(),
+            coin_info.recovery_list_hash.into(),
+            num_verifications_required.into(),
+        ],
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn update_did(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
+    let num_verifications_required: i64 = coin_info.num_verifications_required.try_into()?;
+
+    conn.execute(
+        sql_file!("dids/update_did.sql"),
+        vec![
+            coin_info.metadata.as_slice().into(),
+            coin_info.recovery_list_hash.into(),
+            num_verifications_required.into(),
+            hash.into(),
+        ],
+    )
+    .await?;
+
+    Ok(())
 }

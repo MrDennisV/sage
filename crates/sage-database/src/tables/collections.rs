@@ -1,5 +1,8 @@
-use crate::{Convert, Database, DatabaseTx, Result};
-use chia_wallet_sdk::prelude::*;
+#[cfg(feature = "sqlite")]
+use crate::{Convert, Database};
+use crate::{DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
+use chia_protocol::Bytes32;
+#[cfg(feature = "sqlite")]
 use sqlx::{SqliteExecutor, query};
 
 #[derive(Debug, Clone)]
@@ -14,6 +17,7 @@ pub struct CollectionRow {
     pub is_visible: bool,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn collections(
         &self,
@@ -33,16 +37,20 @@ impl Database {
     }
 }
 
+#[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
-    pub async fn insert_collection(&mut self, row: CollectionRow) -> Result<()> {
-        insert_collection(&mut *self.tx, row).await
-    }
-
     pub async fn set_collection_visible(&mut self, hash: Bytes32, visible: bool) -> Result<()> {
         set_collection_visible(&mut *self.tx, hash, visible).await
     }
 }
 
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
+    pub async fn insert_collection(&mut self, row: CollectionRow) -> Result<()> {
+        insert_collection(&mut self.tx, row).await
+    }
+}
+
+#[cfg(feature = "sqlite")]
 async fn collection(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<Option<CollectionRow>> {
     let hash_ref = hash.as_ref();
     let row = query!(
@@ -69,6 +77,7 @@ async fn collection(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<Opti
     .transpose()
 }
 
+#[cfg(feature = "sqlite")]
 async fn collections(
     conn: impl SqliteExecutor<'_>,
     limit: u32,
@@ -116,32 +125,26 @@ async fn collections(
     Ok((collections, total_count))
 }
 
-async fn insert_collection(conn: impl SqliteExecutor<'_>, row: CollectionRow) -> Result<()> {
-    let hash_ref = row.hash.as_ref();
-    let minter_hash_ref = row.minter_hash.as_ref();
-    query!(
-        "
-        INSERT OR IGNORE INTO collections (
-            hash, uuid, minter_hash, name, icon_url,
-            banner_url, description, is_visible
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ",
-        hash_ref,
-        row.uuid,
-        minter_hash_ref,
-        row.name,
-        row.icon_url,
-        row.banner_url,
-        row.description,
-        row.is_visible,
+async fn insert_collection(mut conn: impl SqlAccess, row: CollectionRow) -> Result<()> {
+    conn.execute(
+        sql_file!("collections/insert_collection.sql"),
+        vec![
+            row.hash.into(),
+            row.uuid.into(),
+            row.minter_hash.into(),
+            row.name.into(),
+            row.icon_url.into(),
+            row.banner_url.into(),
+            row.description.into(),
+            row.is_visible.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn set_collection_visible(
     conn: impl SqliteExecutor<'_>,
     hash: Bytes32,

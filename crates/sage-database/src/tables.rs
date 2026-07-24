@@ -1,12 +1,8 @@
 mod assets;
-#[cfg(feature = "sqlite")]
 mod blocks;
 mod coins;
-#[cfg(feature = "sqlite")]
 mod collections;
-#[cfg(feature = "sqlite")]
 mod files;
-#[cfg(feature = "sqlite")]
 mod mempool_items;
 #[cfg(feature = "sqlite")]
 mod offers;
@@ -16,11 +12,8 @@ mod transactions;
 
 pub use assets::*;
 pub use coins::*;
-#[cfg(feature = "sqlite")]
 pub use collections::*;
-#[cfg(feature = "sqlite")]
 pub use files::*;
-#[cfg(feature = "sqlite")]
 pub use mempool_items::*;
 #[cfg(feature = "sqlite")]
 pub use offers::*;

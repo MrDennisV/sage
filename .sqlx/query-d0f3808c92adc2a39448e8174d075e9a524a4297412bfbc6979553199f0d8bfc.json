@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE coins SET is_children_synced = TRUE WHERE hash = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d0f3808c92adc2a39448e8174d075e9a524a4297412bfbc6979553199f0d8bfc"
+}

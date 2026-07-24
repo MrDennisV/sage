@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM coins WHERE asset_id = (SELECT id FROM assets WHERE hash = ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c3eab32c8deeeeea96e059a6bc94259587c9b369e6a787d757cc5f179d215fa9"
+}
