@@ -5,7 +5,8 @@ use sage_api::{
     Amount, CoinJson, CoinSpendJson, SpendBundleJson, TransactionInput, TransactionOutput,
     TransactionSummary,
 };
-use sage_assets::{Data, base64_data_uri};
+use sage_assets::Data;
+use sage_wallet::portable::base64_data_uri;
 use sage_database::{Asset, AssetKind, Database};
 use sage_wallet::{CoinKind, Transaction, compute_nft_info};
 

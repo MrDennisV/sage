@@ -496,3 +496,43 @@ fn rust_migration_version() {
 fn set_rust_migration_version() {
     let _ = sqlx::query_file!("queries/rust_migrations/set_rust_migration_version.sql", 0i64);
 }
+
+fn insert_clawback_p2_puzzle() {
+    let hash = hash();
+    let hash2 = hash.clone();
+    let hash3 = hash.clone();
+    let _ = sqlx::query_file!(
+        "queries/p2_puzzles/insert_clawback_p2_puzzle.sql",
+        hash,
+        hash2,
+        hash3,
+        hash3,
+        0i64
+    );
+}
+
+fn insert_option_p2_puzzle() {
+    let hash = hash();
+    let hash2 = hash.clone();
+    let hash3 = hash.clone();
+    let _ = sqlx::query_file!(
+        "queries/p2_puzzles/insert_option_p2_puzzle.sql",
+        hash,
+        hash2,
+        hash3,
+        hash3,
+        0i64
+    );
+}
+
+fn insert_arbor_p2_puzzle() {
+    let hash = hash();
+    let hash2 = hash.clone();
+    let key = hash.clone();
+    let _ = sqlx::query_file!(
+        "queries/p2_puzzles/insert_arbor_p2_puzzle.sql",
+        hash,
+        hash2,
+        key
+    );
+}

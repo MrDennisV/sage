@@ -28,7 +28,9 @@ chia-bls = { workspace = true }
 chia-protocol = { workspace = true }
 chia-puzzle-types = { workspace = true }
 chia-sdk-driver = { workspace = true }
+chia-sdk-types = { workspace = true }
 clvm-traits = { workspace = true }
+clvm-utils = { workspace = true }
 clvmr = { workspace = true }
 
 cfg-if = { workspace = true }

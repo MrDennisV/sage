@@ -1,22 +1,22 @@
 use std::collections::{HashMap, HashSet};
 
-use chia_wallet_sdk::{
-    chia::puzzle_types::{LineageProof, nft::NftMetadata},
-    prelude::*,
-};
-use sage_assets::base64_data_uri;
+use crate::prelude::*;
+use chia_puzzle_types::{LineageProof, nft::NftMetadata};
+
 use sage_database::{
     Asset, AssetKind, Database, DatabaseTx, DidCoinInfo, NftCoinInfo, OptionCoinInfo,
-    SerializedNftInfo,
+    SerializedNftInfo, SqlExecutor,
 };
 use tracing::{error, warn};
 
+use crate::portable::base64_data_uri;
 use crate::{
-    ChildKind, OptionContext, PuzzleContext, Transaction, WalletError, WalletPeer, compute_nft_info,
+    ChildKind, OptionContext, PeerApi, PendingPeer, PuzzleContext, Transaction, WalletError,
+    compute_nft_info,
 };
 
-pub async fn validate_wallet_coin(
-    tx: &mut DatabaseTx<'_>,
+pub async fn validate_wallet_coin<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_id: Bytes32,
     info: &ChildKind,
 ) -> Result<bool, WalletError> {
@@ -43,8 +43,8 @@ pub async fn validate_wallet_coin(
     Ok(true)
 }
 
-pub async fn insert_puzzle(
-    tx: &mut DatabaseTx<'_>,
+pub async fn insert_puzzle<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_state: CoinState,
     info: ChildKind,
     context: PuzzleContext,
@@ -249,8 +249,8 @@ pub async fn insert_puzzle(
     Ok(true)
 }
 
-pub async fn insert_nft(
-    tx: &mut DatabaseTx<'_>,
+pub async fn insert_nft<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_state: CoinState,
     lineage_proof: Option<LineageProof>,
     info: SerializedNftInfo,
@@ -371,8 +371,8 @@ pub async fn insert_nft(
     Ok(())
 }
 
-pub async fn insert_option(
-    tx: &mut DatabaseTx<'_>,
+pub async fn insert_option<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_state: CoinState,
     lineage_proof: Option<LineageProof>,
     info: OptionInfo,
@@ -509,9 +509,9 @@ pub async fn insert_option(
     Ok(true)
 }
 
-pub async fn insert_transaction(
-    db: &Database,
-    peer: &WalletPeer,
+pub async fn insert_transaction<E: SqlExecutor>(
+    db: &Database<E>,
+    peer: &impl PeerApi,
     genesis_challenge: Bytes32,
     transaction_id: Bytes32,
     transaction: Transaction,
@@ -534,7 +534,7 @@ pub async fn insert_transaction(
         }
     }
 
-    let peer = peer.with_pending(cached_coin_states, coin_spends.clone());
+    let peer = PendingPeer::new(peer, cached_coin_states, coin_spends.clone());
 
     let mut puzzle_contexts = HashMap::new();
 

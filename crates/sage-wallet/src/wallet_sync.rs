@@ -1,27 +1,19 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
-use chia_wallet_sdk::{chia::protocol::CoinStateFilters, prelude::*};
-use sage_database::DatabaseTx;
-use tokio::{
-    sync::{Mutex, mpsc},
-    time::sleep,
-};
-use tracing::{info, warn};
+use crate::prelude::*;
+use chia_protocol::CoinStateFilters;
+use sage_database::{DatabaseTx, SqlExecutor};
+use tracing::info;
 
-use crate::{SyncCommand, Wallet, WalletError, WalletPeer};
+use crate::portable::sleep;
+use crate::{EventSink, PeerApi, SyncEvent, Wallet, WalletError};
 
-use super::{PeerState, SyncEvent};
-
-pub async fn sync_wallet(
-    wallet: Arc<Wallet>,
-    peer: WalletPeer,
-    state: Arc<Mutex<PeerState>>,
-    sync_sender: mpsc::Sender<SyncEvent>,
-    command_sender: mpsc::Sender<SyncCommand>,
+pub async fn sync_wallet<E: SqlExecutor>(
+    wallet: Arc<Wallet<E>>,
+    peer: &impl PeerApi,
+    sink: &impl EventSink,
     delta_sync: bool,
 ) -> Result<(), WalletError> {
-    info!("Starting sync against peer {}", peer.socket_addr());
-
     let p2_puzzle_hashes = wallet.db.custody_p2_puzzle_hashes().await?;
 
     let (start_height, start_header_hash) = if delta_sync {
@@ -38,27 +30,17 @@ pub async fn sync_wallet(
 
     sync_coin_ids(
         &wallet,
-        &peer,
+        peer,
         start_height,
         start_header_hash,
         coin_ids,
-        sync_sender.clone(),
-        command_sender.clone(),
+        sink,
         false,
     )
     .await?;
 
     for batch in p2_puzzle_hashes.chunks(1000) {
-        sync_puzzle_hashes(
-            &wallet,
-            &peer,
-            start_height,
-            start_header_hash,
-            batch,
-            sync_sender.clone(),
-            command_sender.clone(),
-        )
-        .await?;
+        sync_puzzle_hashes(&wallet, peer, start_height, start_header_hash, batch, sink).await?;
     }
 
     loop {
@@ -73,53 +55,24 @@ pub async fn sync_wallet(
 
         info!("Inserted {} derivations", derivations.len());
 
-        sync_sender
-            .send(SyncEvent::DerivationIndex { next_index })
-            .await
-            .ok();
+        sink.send_event(SyncEvent::DerivationIndex { next_index })
+            .await;
 
         for batch in derivations.chunks(1000) {
-            sync_puzzle_hashes(
-                &wallet,
-                &peer,
-                None,
-                wallet.genesis_challenge,
-                batch,
-                sync_sender.clone(),
-                command_sender.clone(),
-            )
-            .await?;
-        }
-    }
-
-    if delta_sync {
-        if let Some((height, header_hash)) = state.lock().await.peak_of(peer.socket_addr().ip()) {
-            info!(
-                "Updating peak from peer to {} with header hash {}",
-                height, header_hash
-            );
-
-            wallet
-                .db
-                .insert_block(height, header_hash, None, true)
-                .await?;
-        } else {
-            warn!("No peak found");
+            sync_puzzle_hashes(&wallet, peer, None, wallet.genesis_challenge, batch, sink).await?;
         }
     }
 
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn sync_coin_ids(
-    wallet: &Wallet,
-    peer: &WalletPeer,
+async fn sync_coin_ids<E: SqlExecutor>(
+    wallet: &Wallet<E>,
+    peer: &impl PeerApi,
     start_height: Option<u32>,
     start_header_hash: Bytes32,
     coin_ids: Vec<Bytes32>,
-    sync_sender: mpsc::Sender<SyncEvent>,
-    command_sender: mpsc::Sender<SyncCommand>,
+    sink: &impl EventSink,
     only_send_event_if_spent: bool,
 ) -> Result<(), WalletError> {
     for (i, coin_ids) in coin_ids.chunks(10000).enumerate() {
@@ -127,11 +80,7 @@ async fn sync_coin_ids(
             sleep(Duration::from_millis(500)).await;
         }
 
-        info!(
-            "Subscribing to {} coins from peer {}",
-            coin_ids.len(),
-            peer.socket_addr()
-        );
+        info!("Subscribing to {} coins", coin_ids.len());
 
         let coin_states = peer
             .subscribe_coins(coin_ids.to_vec(), start_height, start_header_hash)
@@ -143,21 +92,20 @@ async fn sync_coin_ids(
             .iter()
             .any(|cs| cs.spent_height.is_some() || !only_send_event_if_spent)
         {
-            incremental_sync(wallet, coin_states, true, &sync_sender, &command_sender).await?;
+            incremental_sync(wallet, coin_states, true, sink).await?;
         }
     }
 
     Ok(())
 }
 
-async fn sync_puzzle_hashes(
-    wallet: &Wallet,
-    peer: &WalletPeer,
+async fn sync_puzzle_hashes<E: SqlExecutor>(
+    wallet: &Wallet<E>,
+    peer: &impl PeerApi,
     start_height: Option<u32>,
     start_header_hash: Bytes32,
     puzzle_hashes: &[Bytes32],
-    sync_sender: mpsc::Sender<SyncEvent>,
-    command_sender: mpsc::Sender<SyncCommand>,
+    sink: &impl EventSink,
 ) -> Result<(), WalletError> {
     if puzzle_hashes.is_empty() {
         return Ok(());
@@ -168,11 +116,10 @@ async fn sync_puzzle_hashes(
 
     loop {
         info!(
-            "Subscribing to {} puzzle hashes at height {:?} and header hash {} from peer {}",
+            "Subscribing to {} puzzle hashes at height {:?} and header hash {}",
             puzzle_hashes.len(),
             prev_height,
             prev_header_hash,
-            peer.socket_addr()
         );
 
         let data = peer
@@ -187,14 +134,7 @@ async fn sync_puzzle_hashes(
         info!("Received {} coin states", data.coin_states.len());
 
         if !data.coin_states.is_empty() {
-            incremental_sync(
-                wallet,
-                data.coin_states,
-                true,
-                &sync_sender,
-                &command_sender,
-            )
-            .await?;
+            incremental_sync(wallet, data.coin_states, true, sink).await?;
         }
 
         prev_height = Some(data.height);
@@ -208,12 +148,11 @@ async fn sync_puzzle_hashes(
     Ok(())
 }
 
-pub async fn incremental_sync(
-    wallet: &Wallet,
+pub async fn incremental_sync<E: SqlExecutor>(
+    wallet: &Wallet<E>,
     coin_states: Vec<CoinState>,
     derive_automatically: bool,
-    sync_sender: &mpsc::Sender<SyncEvent>,
-    command_sender: &mpsc::Sender<SyncCommand>,
+    sink: &impl EventSink,
 ) -> Result<(), WalletError> {
     let mut tx = wallet.db.tx().await?;
     let mut confirmed_transactions = HashSet::new();
@@ -269,29 +208,22 @@ pub async fn incremental_sync(
     tx.commit().await?;
 
     if !coin_states.is_empty() {
-        sync_sender.send(SyncEvent::CoinsUpdated).await.ok();
+        sink.send_event(SyncEvent::CoinsUpdated).await;
     }
 
     if !new_derivations.is_empty() {
-        sync_sender
-            .send(SyncEvent::DerivationIndex { next_index })
-            .await
-            .ok();
+        sink.send_event(SyncEvent::DerivationIndex { next_index })
+            .await;
 
-        command_sender
-            .send(SyncCommand::SubscribePuzzles {
-                puzzle_hashes: new_derivations,
-            })
-            .await
-            .ok();
+        sink.subscribe_puzzles(new_derivations).await;
     }
 
     Ok(())
 }
 
-async fn auto_insert_unhardened_derivations(
-    wallet: &Wallet,
-    tx: &mut DatabaseTx<'_>,
+async fn auto_insert_unhardened_derivations<E: SqlExecutor>(
+    wallet: &Wallet<E>,
+    tx: &mut DatabaseTx<'_, E>,
 ) -> Result<Vec<Bytes32>, WalletError> {
     let mut derivations = Vec::new();
     let mut next_index = tx.derivation_index(false).await?;
@@ -311,13 +243,12 @@ async fn auto_insert_unhardened_derivations(
     Ok(derivations)
 }
 
-pub async fn add_new_subscriptions(
-    wallet: &Wallet,
-    peer: &WalletPeer,
+pub async fn add_new_subscriptions<E: SqlExecutor>(
+    wallet: &Wallet<E>,
+    peer: &impl PeerApi,
     coin_ids: Vec<Bytes32>,
     puzzle_hashes: Vec<Bytes32>,
-    sync_sender: mpsc::Sender<SyncEvent>,
-    command_sender: mpsc::Sender<SyncCommand>,
+    sink: &impl EventSink,
 ) -> Result<(), WalletError> {
     for batch in coin_ids.chunks(1000) {
         sync_coin_ids(
@@ -326,24 +257,14 @@ pub async fn add_new_subscriptions(
             None,
             wallet.genesis_challenge,
             batch.to_vec(),
-            sync_sender.clone(),
-            command_sender.clone(),
+            sink,
             true,
         )
         .await?;
     }
 
     for batch in puzzle_hashes.chunks(1000) {
-        sync_puzzle_hashes(
-            wallet,
-            peer,
-            None,
-            wallet.genesis_challenge,
-            batch,
-            sync_sender.clone(),
-            command_sender.clone(),
-        )
-        .await?;
+        sync_puzzle_hashes(wallet, peer, None, wallet.genesis_challenge, batch, sink).await?;
     }
 
     Ok(())

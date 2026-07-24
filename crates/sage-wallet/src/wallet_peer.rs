@@ -347,6 +347,14 @@ impl crate::PeerApi for WalletPeer {
         WalletPeer::fetch_coin(self, coin_id, genesis_challenge).await
     }
 
+    async fn fetch_coins(
+        &self,
+        coin_ids: Vec<Bytes32>,
+        genesis_challenge: Bytes32,
+    ) -> Result<Vec<CoinState>, WalletError> {
+        WalletPeer::fetch_coins(self, coin_ids, genesis_challenge).await
+    }
+
     async fn fetch_optional_coin(
         &self,
         coin_id: Bytes32,

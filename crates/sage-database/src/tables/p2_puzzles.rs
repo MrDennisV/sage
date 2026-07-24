@@ -1,13 +1,8 @@
 use chia_bls::PublicKey;
 use chia_protocol::Bytes32;
-use chia_sdk_driver::OptionType;
-#[cfg(feature = "sqlite")]
-use chia_sdk_driver::{ClawbackV2, OptionUnderlying};
-#[cfg(feature = "sqlite")]
-use chia_wallet_sdk::{
-    clvm_utils::ToTreeHash,
-    types::{Mod, puzzles::P2DelegatedConditionsArgs},
-};
+use chia_sdk_driver::{ClawbackV2, OptionType, OptionUnderlying};
+use chia_sdk_types::{Mod, puzzles::P2DelegatedConditionsArgs};
+use clvm_utils::ToTreeHash;
 #[cfg(feature = "sqlite")]
 use sqlx::{SqliteExecutor, query};
 
@@ -144,22 +139,19 @@ impl<E: SqlExecutor> Database<E> {
     }
 }
 
-#[cfg(feature = "sqlite")]
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_clawback_p2_puzzle(&mut self, clawback: ClawbackV2) -> Result<()> {
-        insert_clawback_p2_puzzle(&mut *self.tx, clawback).await
+        insert_clawback_p2_puzzle(&mut self.tx, clawback).await
     }
 
     pub async fn insert_option_p2_puzzle(&mut self, underlying: OptionUnderlying) -> Result<()> {
-        insert_option_p2_puzzle(&mut *self.tx, underlying).await
+        insert_option_p2_puzzle(&mut self.tx, underlying).await
     }
 
     pub async fn insert_arbor_p2_puzzle(&mut self, key: PublicKey) -> Result<()> {
-        insert_arbor_p2_puzzle(&mut *self.tx, key).await
+        insert_arbor_p2_puzzle(&mut self.tx, key).await
     }
-}
 
-impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn is_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
         is_p2_puzzle_hash(&mut self.tx, puzzle_hash).await
     }
@@ -352,89 +344,56 @@ async fn insert_custody_p2_puzzle(
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn insert_clawback_p2_puzzle(
-    conn: impl SqliteExecutor<'_>,
-    clawback: ClawbackV2,
-) -> Result<()> {
+async fn insert_clawback_p2_puzzle(mut conn: impl SqlAccess, clawback: ClawbackV2) -> Result<()> {
     let p2_puzzle_hash = clawback.tree_hash().to_vec();
-    let sender_puzzle_hash = clawback.sender_puzzle_hash.as_ref();
-    let receiver_puzzle_hash = clawback.receiver_puzzle_hash.as_ref();
     let seconds: i64 = clawback.seconds.try_into()?;
 
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 1);
-
-        INSERT OR IGNORE INTO clawbacks (p2_puzzle_id, sender_puzzle_hash, receiver_puzzle_hash, expiration_seconds)
-        VALUES ((SELECT id FROM p2_puzzles WHERE hash = ?), ?, ?, ?);
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        sender_puzzle_hash,
-        receiver_puzzle_hash,
-        seconds,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_clawback_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.clone().into(),
+            p2_puzzle_hash.into(),
+            clawback.sender_puzzle_hash.into(),
+            clawback.receiver_puzzle_hash.into(),
+            seconds.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
 async fn insert_option_p2_puzzle(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     underlying: OptionUnderlying,
 ) -> Result<()> {
-    let asset_hash = underlying.launcher_id.as_ref();
     let p2_puzzle_hash = underlying.tree_hash().to_vec();
-    let creator_puzzle_hash = underlying.creator_puzzle_hash.as_ref();
     let seconds: i64 = underlying.seconds.try_into()?;
 
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 2);
-
-        INSERT OR IGNORE INTO p2_options (p2_puzzle_id, option_asset_id, creator_puzzle_hash, expiration_seconds)
-        VALUES (
-            (SELECT id FROM p2_puzzles WHERE hash = ?),
-            (SELECT id FROM assets WHERE hash = ?),
-            ?,
-            ?
-        );
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        asset_hash,
-        creator_puzzle_hash,
-        seconds,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_option_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.clone().into(),
+            p2_puzzle_hash.into(),
+            underlying.launcher_id.into(),
+            underlying.creator_puzzle_hash.into(),
+            seconds.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn insert_arbor_p2_puzzle(conn: impl SqliteExecutor<'_>, key: PublicKey) -> Result<()> {
+async fn insert_arbor_p2_puzzle(mut conn: impl SqlAccess, key: PublicKey) -> Result<()> {
     let p2_puzzle_hash = P2DelegatedConditionsArgs::new(key)
         .curry_tree_hash()
         .to_vec();
-    let key = key.to_bytes();
-    let key = key.as_ref();
 
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 3);
-
-        INSERT OR IGNORE INTO p2_arbor (p2_puzzle_id, key)
-        VALUES ((SELECT id FROM p2_puzzles WHERE hash = ?), ?);
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        key,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_arbor_p2_puzzle.sql"),
+        vec![p2_puzzle_hash.clone().into(), p2_puzzle_hash.into(), key.into()],
     )
-    .execute(conn)
     .await?;
 
     Ok(())

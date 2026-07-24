@@ -1,25 +1,19 @@
-#[cfg(feature = "native")]
 use std::ops::Range;
 
 use crate::prelude::*;
-#[cfg(feature = "native")]
 use chia_bls::DerivableKey;
-#[cfg(feature = "native")]
 use chia_puzzle_types::{DeriveSynthetic, standard::StandardArgs};
-#[cfg(feature = "native")]
-use sage_database::{DatabaseTx, Derivation};
-use sage_database::SqlExecutor;
+use sage_database::{DatabaseTx, Derivation, SqlExecutor};
 
 use crate::WalletError;
 
 use super::Wallet;
 
-#[cfg(feature = "native")]
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     /// Inserts a range of unhardened derivations to the database.
     pub async fn insert_unhardened_derivations(
         &self,
-        tx: &mut DatabaseTx<'_>,
+        tx: &mut DatabaseTx<'_, E>,
         range: Range<u32>,
     ) -> Result<Vec<Bytes32>, WalletError> {
         let mut puzzle_hashes = Vec::new();
@@ -47,9 +41,7 @@ impl Wallet {
 
         Ok(puzzle_hashes)
     }
-}
 
-impl<E: SqlExecutor> Wallet<E> {
     pub async fn p2_puzzle_hashes(
         &self,
         count: u32,

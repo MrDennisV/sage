@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use futures_lite::StreamExt;
 use futures_util::stream::FuturesUnordered;
-use sage_assets::{base64_data_uri, fetch_uri};
+use sage_assets::fetch_uri;
+
+use crate::portable::base64_data_uri;
 use sage_database::{Database, NftMetadataInfo, ResizedImageKind};
 use tokio::{
     sync::mpsc,

@@ -20,10 +20,10 @@ native = [
     "dep:chia-wallet-sdk",
     "dep:tokio",
     "dep:reqwest",
-    "dep:sage-assets",
     "dep:sage-config",
     "dep:futures-util",
     "dep:futures-lite",
+    "sage-assets/native",
     "sage-database/sqlite",
 ]
 
@@ -47,16 +47,17 @@ chia_streamable_macro = { workspace = true }
 chia-traits = { workspace = true }
 chia-sha2 = { workspace = true }
 
+sage-assets = { workspace = true }
 sage-database = { workspace = true }
 
 # Native-only dependencies
-sage-assets = { workspace = true, optional = true }
 sage-config = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["time"], optional = true }
 futures-util = { workspace = true, optional = true }
 futures-lite = { workspace = true, optional = true }
 reqwest = { workspace = true, default-features = false, features = ["http2", "rustls-tls-webpki-roots", "json"], optional = true }
 
+base64 = { workspace = true }
 cfg-if = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
