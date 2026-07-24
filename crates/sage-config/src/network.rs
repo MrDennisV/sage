@@ -1,6 +1,7 @@
 use std::sync::LazyLock;
 
-use chia_wallet_sdk::prelude::*;
+use chia_protocol::Bytes32;
+use chia_sdk_types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS};
 use serde::{Deserialize, Serialize};
 use serde_with::{hex::Hex, serde_as};
 use specta::Type;

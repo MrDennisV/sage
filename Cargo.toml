@@ -89,6 +89,9 @@ utoipa = "5.2.0"
 
 # Chia
 chia-wallet-sdk = { version = "0.33.0", features = ["rustls", "offer-compression", "peer-simulator"] }
+chia-bls = "0.36.1"
+chia-protocol = "0.36.1"
+chia-sdk-types = "0.33.0"
 chia_streamable_macro = "0.36.1"
 chia-traits = "0.36.1"
 chia-sha2 = "0.36.1"

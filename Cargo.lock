@@ -6318,7 +6318,8 @@ dependencies = [
 name = "sage-config"
 version = "0.12.9"
 dependencies = [
- "chia-wallet-sdk",
+ "chia-protocol",
+ "chia-sdk-types",
  "expect-test",
  "hex",
  "indexmap 2.12.1",

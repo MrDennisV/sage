@@ -1,6 +1,6 @@
 use std::num::ParseIntError;
 
-use chia_wallet_sdk::prelude::*;
+use chia_protocol::Bytes32;
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_with::{hex::Hex, serde_as};
