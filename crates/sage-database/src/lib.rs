@@ -1,25 +1,33 @@
+#[cfg(feature = "sqlite")]
 mod maintenance;
 mod serialized_primitives;
+#[cfg(feature = "sqlite")]
 mod tables;
 mod utils;
 
+#[cfg(feature = "sqlite")]
 pub use maintenance::*;
 pub use serialized_primitives::*;
+#[cfg(feature = "sqlite")]
 pub use tables::*;
 
 pub(crate) use utils::*;
 
 use std::num::TryFromIntError;
 
+#[cfg(feature = "sqlite")]
 use sqlx::{Sqlite, SqlitePool, Transaction as SqliteTransaction};
 use thiserror::Error;
+#[cfg(feature = "sqlite")]
 use tracing::info;
 
+#[cfg(feature = "sqlite")]
 #[derive(Debug, Clone)]
 pub struct Database {
     pub(crate) pool: SqlitePool,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
@@ -52,11 +60,13 @@ impl Database {
     }
 }
 
+#[cfg(feature = "sqlite")]
 #[derive(Debug)]
 pub struct DatabaseTx<'a> {
     pub(crate) tx: SqliteTransaction<'a, Sqlite>,
 }
 
+#[cfg(feature = "sqlite")]
 impl<'a> DatabaseTx<'a> {
     pub fn new(tx: SqliteTransaction<'a, Sqlite>) -> Self {
         Self { tx }
@@ -89,6 +99,7 @@ impl<'a> DatabaseTx<'a> {
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
+    #[cfg(feature = "sqlite")]
     #[error("SQLx error: {0}")]
     Sqlx(#[from] sqlx::Error),
 
@@ -99,7 +110,7 @@ pub enum DatabaseError {
     InvalidLength(usize, usize),
 
     #[error("BLS error: {0}")]
-    Bls(#[from] chia_wallet_sdk::chia::bls::Error),
+    Bls(#[from] chia_bls::Error),
 
     #[error("Invalid enum variant")]
     InvalidEnumVariant,

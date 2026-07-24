@@ -6334,7 +6334,13 @@ dependencies = [
 name = "sage-database"
 version = "0.12.9"
 dependencies = [
+ "chia-bls 0.36.1",
+ "chia-protocol",
+ "chia-sdk-driver",
  "chia-wallet-sdk",
+ "clvm-traits 0.36.1",
+ "clvmr",
+ "getrandom 0.3.4",
  "hex",
  "sqlx",
  "thiserror 1.0.69",
