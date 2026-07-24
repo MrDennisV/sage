@@ -6,7 +6,7 @@ use chia_sdk_driver::{
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
-use sage_database::{NftOfferInfo, OptionOfferInfo, WalletDb};
+use sage_database::{NftOfferInfo, OptionOfferInfo, SqlExecutor};
 
 use crate::{Wallet, WalletError};
 
@@ -35,7 +35,7 @@ pub struct RequestedCat {
     pub hidden_puzzle_hash: Option<Bytes32>,
 }
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn make_offer(
         &self,
         offered: Offered,

@@ -51,7 +51,7 @@ sage-api = { path = "./crates/sage-api" }
 sage-api-macro = { path = "./crates/sage-api/macro" }
 sage-client = { path = "./crates/sage-client" }
 sage-config = { path = "./crates/sage-config" }
-sage-database = { path = "./crates/sage-database" }
+sage-database = { path = "./crates/sage-database", default-features = false }
 sage-keychain = { path = "./crates/sage-keychain" }
 sage-wallet = { path = "./crates/sage-wallet" }
 sage-assets = { path = "./crates/sage-assets" }
@@ -92,11 +92,13 @@ chia-wallet-sdk = { version = "0.33.0", features = ["rustls", "offer-compression
 chia-bls = "0.36.1"
 chia-protocol = "0.36.1"
 chia-puzzle-types = "0.36.1"
+chia-puzzles = "0.20.3"
 chia-sdk-driver = "0.33.0"
 chia-sdk-signer = "0.33.0"
 chia-sdk-types = "0.33.0"
 chia-sdk-utils = "0.33.0"
 clvm-traits = "0.36.1"
+clvm-utils = "0.36.1"
 clvmr = "0.16.2"
 cfg-if = "1.0"
 chia_streamable_macro = "0.36.1"

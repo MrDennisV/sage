@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use sage_database::{SerializePrimitive, SerializedDid, WalletDb};
+use sage_database::{SerializePrimitive, SerializedDid, SqlExecutor};
 
 use crate::{
     WalletError,
@@ -8,7 +8,7 @@ use crate::{
 
 use super::Wallet;
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn create_did(
         &self,
         fee: u64,

@@ -5,11 +5,11 @@ use chia_sdk_driver::{
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
-use sage_database::{NftOfferInfo, WalletDb};
+use sage_database::{NftOfferInfo, SqlExecutor};
 
 use crate::{Wallet, WalletError};
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn take_offer(
         &self,
         spend_bundle: SpendBundle,

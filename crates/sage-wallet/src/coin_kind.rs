@@ -1,6 +1,5 @@
-use chia_wallet_sdk::{
-    chia::puzzle_types::nft::NftMetadata, prelude::*, puzzles::SINGLETON_LAUNCHER_HASH,
-};
+use crate::prelude::*;
+use chia_puzzle_types::nft::NftMetadata;
 use sage_database::{SerializePrimitive, SerializedDidInfo, SerializedNftInfo};
 use tracing::{debug_span, warn};
 

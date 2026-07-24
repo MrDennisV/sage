@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use chia_puzzle_types::offer::{NotarizedPayment, Payment};
-use sage_database::{CoinKind, WalletDb};
+use sage_database::{CoinKind, SqlExecutor};
 
 use crate::{
     WalletError,
@@ -16,7 +16,7 @@ pub struct WalletOptionMint {
     pub strike_type: OptionType,
 }
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn mint_option(
         &self,
         mint: WalletOptionMint,

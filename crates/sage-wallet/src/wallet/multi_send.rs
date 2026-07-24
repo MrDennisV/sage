@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-use sage_database::WalletDb;
+use sage_database::SqlExecutor;
 
 use crate::{WalletError, wallet::memos::Hint};
 
@@ -42,7 +42,7 @@ impl MultiSendPayment {
     }
 }
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     /// Sends XCH and CATs to the given puzzle hashes.
     pub async fn multi_send(
         &self,

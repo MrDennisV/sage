@@ -16,7 +16,7 @@ workspace = true
 
 [dependencies]
 sage-api = { workspace = true }
-sage-database = { workspace = true }
+sage-database = { workspace = true, features = ["sqlite"] }
 sage-config = { workspace = true }
 sage-keychain = { workspace = true }
 sage-wallet = { workspace = true }

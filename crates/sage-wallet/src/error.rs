@@ -1,16 +1,17 @@
 use std::{num::TryFromIntError, time::SystemTimeError};
 
-use chia_wallet_sdk::{
-    client::ClientError,
-    clvm_traits::{FromClvmError, ToClvmError},
-    clvmr::error::EvalErr,
-    prelude::*,
-    signer::SignerError,
-    utils::CoinSelectionError,
-};
+use crate::prelude::*;
+use clvm_traits::{FromClvmError, ToClvmError};
+use clvmr::error::EvalErr;
+use chia_sdk_signer::SignerError;
+use chia_sdk_utils::CoinSelectionError;
+#[cfg(feature = "native")]
+use chia_wallet_sdk::client::ClientError;
+#[cfg(feature = "native")]
 use sage_assets::UriError;
 use sage_database::{CoinKind, DatabaseError};
 use thiserror::Error;
+#[cfg(feature = "native")]
 use tokio::{task::JoinError, time::error::Elapsed};
 
 #[derive(Debug, Error)]
@@ -18,6 +19,7 @@ pub enum WalletError {
     #[error("Database error: {0}")]
     Database(#[from] DatabaseError),
 
+    #[cfg(feature = "native")]
     #[error("Client error: {0}")]
     Client(#[from] ClientError),
 
@@ -30,12 +32,15 @@ pub enum WalletError {
     #[error("Coin selection error: {0}")]
     CoinSelection(#[from] CoinSelectionError),
 
+    #[cfg(feature = "native")]
     #[error("Request error: {0}")]
     Request(#[from] reqwest::Error),
 
+    #[cfg(feature = "native")]
     #[error("URI error: {0}")]
     Uri(#[from] UriError),
 
+    #[cfg(feature = "native")]
     #[error("Timeout exceeded")]
     Elapsed(#[from] Elapsed),
 
@@ -54,6 +59,7 @@ pub enum WalletError {
     #[error("System time error: {0}")]
     SystemTime(#[from] SystemTimeError),
 
+    #[cfg(feature = "native")]
     #[error("Join error: {0}")]
     Join(#[from] JoinError),
 

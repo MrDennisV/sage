@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use sage_database::{CoinKind, P2Puzzle, WalletDb};
+use sage_database::{CoinKind, P2Puzzle, SqlExecutor};
 
 use crate::{
     WalletError,
@@ -8,7 +8,7 @@ use crate::{
 
 use super::Wallet;
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     /// Sends the given amount of XCH to the given puzzle hash, minus the fee.
     pub async fn send_xch(
         &self,

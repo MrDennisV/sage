@@ -8,13 +8,13 @@ use chia_bls::{
 use chia_puzzle_types::DeriveSynthetic;
 use itertools::Itertools;
 
-use sage_database::WalletDb;
+use sage_database::SqlExecutor;
 
 use crate::WalletError;
 
 use super::Wallet;
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn sign_transaction(
         &self,
         spend_bundle: SpendBundle,

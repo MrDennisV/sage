@@ -1,13 +1,13 @@
 use crate::prelude::*;
 use chia_puzzle_types::cat::EverythingWithSignatureTailArgs;
 
-use sage_database::WalletDb;
+use sage_database::SqlExecutor;
 
 use crate::{WalletError, wallet::memos::Hint};
 
 use super::{Wallet, memos::calculate_memos};
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn issue_cat(
         &self,
         amount: u64,

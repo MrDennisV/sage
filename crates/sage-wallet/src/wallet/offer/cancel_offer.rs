@@ -1,10 +1,10 @@
 use crate::prelude::*;
 
-use sage_database::WalletDb;
+use sage_database::SqlExecutor;
 
 use crate::{Wallet, WalletError};
 
-impl<D: WalletDb> Wallet<D> {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn cancel_offer(
         &self,
         spend_bundle: SpendBundle,
