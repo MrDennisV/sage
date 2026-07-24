@@ -30,6 +30,7 @@ chia-sdk-driver = { workspace = true }
 clvm-traits = { workspace = true }
 clvmr = { workspace = true }
 
+cfg-if = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }

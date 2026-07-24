@@ -6334,6 +6334,7 @@ dependencies = [
 name = "sage-database"
 version = "0.12.9"
 dependencies = [
+ "cfg-if",
  "chia-bls 0.36.1",
  "chia-protocol",
  "chia-sdk-driver",

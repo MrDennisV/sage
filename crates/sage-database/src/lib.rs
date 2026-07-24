@@ -1,3 +1,6 @@
+mod executor;
+#[cfg(feature = "sqlite")]
+mod executor_sqlx;
 #[cfg(feature = "sqlite")]
 mod maintenance;
 mod serialized_primitives;
@@ -5,6 +8,9 @@ mod serialized_primitives;
 mod tables;
 mod utils;
 
+pub use executor::*;
+#[cfg(feature = "sqlite")]
+pub use executor_sqlx::*;
 #[cfg(feature = "sqlite")]
 pub use maintenance::*;
 pub use serialized_primitives::*;
@@ -123,6 +129,12 @@ pub enum DatabaseError {
 
     #[error("Public key not found for puzzle hash")]
     PublicKeyNotFound,
+
+    #[error("Column {0} not found in row")]
+    ColumnNotFound(String),
+
+    #[error("Unexpected type for column {0}")]
+    UnexpectedColumnType(String),
 }
 
-pub(crate) type Result<T> = std::result::Result<T, DatabaseError>;
+pub type Result<T> = std::result::Result<T, DatabaseError>;
