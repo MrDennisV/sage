@@ -1,5 +1,7 @@
 mod child_kind;
 mod coin_kind;
+#[cfg(feature = "coinset")]
+mod coinset_peer;
 pub mod prelude;
 mod database;
 mod error;
@@ -23,6 +25,8 @@ mod wallet_peer;
 
 pub use child_kind::*;
 pub use coin_kind::*;
+#[cfg(feature = "coinset")]
+pub use coinset_peer::*;
 pub use database::*;
 pub use error::*;
 pub use offchain_metadata::*;

@@ -44,6 +44,10 @@ pub enum WalletError {
     #[error("Timeout exceeded")]
     Elapsed(#[from] Elapsed),
 
+    #[cfg(feature = "coinset")]
+    #[error("Coinset API error: {0}")]
+    Coinset(String),
+
     #[error("Missing spend with id {0}")]
     MissingSpend(Bytes32),
 

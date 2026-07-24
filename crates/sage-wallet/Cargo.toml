@@ -26,6 +26,7 @@ native = [
     "sage-assets/native",
     "sage-database/sqlite",
 ]
+coinset = ["dep:chia-sdk-coinset"]
 
 [dependencies]
 # Full SDK is only needed for networking and peers (native)
@@ -47,6 +48,7 @@ chia_streamable_macro = { workspace = true }
 chia-traits = { workspace = true }
 chia-sha2 = { workspace = true }
 
+chia-sdk-coinset = { workspace = true, optional = true }
 sage-assets = { workspace = true }
 sage-database = { workspace = true }
 
