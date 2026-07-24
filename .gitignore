@@ -28,3 +28,7 @@ target
 .env
 /test.sqlite*
 
+
+# Chrome extension build output
+dist-extension
+src/extension/wasm

@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:wasm": "wasm-pack build crates/sage-wasm --target web --out-dir ../../src/extension/wasm --out-name sage_wasm",
+    "build:extension": "npm run build:wasm && vite build --config vite.config.extension.ts && node scripts/post-build-extension.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "prettier": "prettier --write .",
@@ -71,6 +73,7 @@
     "react-router-dom": "^6.30.3",
     "react-toastify": "^11.0.5",
     "spoiled": "^0.4.0",
+    "sql.js": "^1.14.1",
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
     "tauri-plugin-safe-area-insets": "^0.1.0",
@@ -90,6 +93,7 @@
     "@types/node": "^22.19.10",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
+    "@types/sql.js": "^1.4.11",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react-swc": "^3.11.0",
@@ -105,5 +109,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0",
     "vite": "^7.3.1"
+  },
+  "volta": {
+    "node": "24.18.0"
   }
 }

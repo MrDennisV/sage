@@ -173,6 +173,9 @@ importers:
       spoiled:
         specifier: ^0.4.0
         version: 0.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      sql.js:
+        specifier: ^1.14.1
+        version: 1.14.1
       tailwind-merge:
         specifier: ^2.6.1
         version: 2.6.1
@@ -225,6 +228,9 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.7
         version: 18.3.7(@types/react@18.3.28)
+      '@types/sql.js':
+        specifier: ^1.4.11
+        version: 1.4.11
       '@typescript-eslint/eslint-plugin':
         specifier: ^7.18.0
         version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
@@ -1727,6 +1733,9 @@ packages:
   '@tauri-apps/plugin-os@2.3.2':
     resolution: {integrity: sha512-n+nXWeuSeF9wcEsSPmRnBEGrRgOy6jjkSU+UVCOV8YUGKb2erhDOxis7IqRXiRVHhY8XMKks00BJ0OAdkpf6+A==}
 
+  '@types/emscripten@1.41.5':
+    resolution: {integrity: sha512-cMQm7pxu6BxtHyqJ7mQZ2kXWV5SLmugybFdHCBbJ5eHzOo6VhBckEgAT3//rP5FwPHNPeEiq4SmQ5ucBwsOo4Q==}
+
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
@@ -1755,6 +1764,9 @@ packages:
 
   '@types/react@18.3.28':
     resolution: {integrity: sha512-z9VXpC7MWrhfWipitjNdgCauoMLRdIILQsAEV+ZesIzBq/oUlxk0m3ApZuMFCXdnS4U7KrI+l3WRUEGQ8K1QKw==}
+
+  '@types/sql.js@1.4.11':
+    resolution: {integrity: sha512-QXIx38p2ZThJaK9vP5ZdqdlRe1FG9I8SmCZOS7FHfB/2qPAjZwkL7/vlfPg6N/oWHuuOaGg/P/IRwfP2W0kWVQ==}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
@@ -3462,6 +3474,9 @@ packages:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
+  sql.js@1.14.1:
+    resolution: {integrity: sha512-gcj8zBWU5cFsi9WUP+4bFNXAyF1iRpA3LLyS/DP5xlrNzGmPIizUeBggKa8DbDwdqaKwUcTEnChtd2grWo/x/A==}
+
   stop-iteration-iterator@1.1.0:
     resolution: {integrity: sha512-eLoXW/DHyl62zxY4SCaIgnRhuMr6ri4juEYARS8E6sCEqzKpOiE521Ucofdx+KnDZl5xmvGYaaKCk5FEOxJCoQ==}
     engines: {node: '>= 0.4'}
@@ -5131,6 +5146,8 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.10.1
 
+  '@types/emscripten@1.41.5': {}
+
   '@types/estree@1.0.8': {}
 
   '@types/istanbul-lib-coverage@2.0.6': {}
@@ -5160,6 +5177,11 @@ snapshots:
     dependencies:
       '@types/prop-types': 15.7.15
       csstype: 3.2.3
+
+  '@types/sql.js@1.4.11':
+    dependencies:
+      '@types/emscripten': 1.41.5
+      '@types/node': 22.19.10
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -7316,6 +7338,8 @@ snapshots:
       colord: 2.9.3
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
+
+  sql.js@1.14.1: {}
 
   stop-iteration-iterator@1.1.0:
     dependencies:
