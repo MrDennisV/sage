@@ -185,9 +185,13 @@ export function registerSqlBridge() {
 export async function initDatabase(): Promise<void> {
   if (db) return;
 
-  const SQL = await initSqlJs({
-    locateFile: (file) => `wasm/${file}`,
-  });
+  // sql.js falls back to XMLHttpRequest when given a file path, which doesn't
+  // exist in service workers, so fetch the wasm binary ourselves.
+  const wasmBinary = await (
+    await fetch(chrome.runtime.getURL('wasm/sql-wasm.wasm'))
+  ).arrayBuffer();
+
+  const SQL = await initSqlJs({ wasmBinary } as never);
 
   const image = await loadImage();
   db = image ? new SQL.Database(image) : new SQL.Database();
