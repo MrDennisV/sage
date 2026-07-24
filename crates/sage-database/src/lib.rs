@@ -182,6 +182,9 @@ pub enum DatabaseError {
 
     #[error("Unexpected type for column {0}")]
     UnexpectedColumnType(String),
+
+    #[error("JS bridge error: {0}")]
+    JsError(String),
 }
 
 pub type Result<T> = std::result::Result<T, DatabaseError>;

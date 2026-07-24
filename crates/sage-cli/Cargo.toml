@@ -19,7 +19,7 @@ name = "sage"
 path = "src/main.rs"
 
 [dependencies]
-sage = { workspace = true }
+sage = { workspace = true, features = ["native"] }
 sage-api = { workspace = true }
 sage-api-macro = { workspace = true }
 sage-rpc = { workspace = true }
