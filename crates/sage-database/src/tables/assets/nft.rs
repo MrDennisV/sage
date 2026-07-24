@@ -1,7 +1,12 @@
+use chia_protocol::{Bytes32, Program};
+#[cfg(feature = "sqlite")]
 use chia_wallet_sdk::prelude::*;
+#[cfg(feature = "sqlite")]
 use sqlx::{Row, query};
 
-use crate::{Asset, AssetKind, CoinKind, CoinRow, Convert, Database, DatabaseTx, Result};
+#[cfg(feature = "sqlite")]
+use crate::{AssetKind, CoinKind, DatabaseTx};
+use crate::{Asset, CoinRow, Convert, Database, Result, SqlAccess, SqlExecutor, sql_file};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NftSortMode {
@@ -59,6 +64,7 @@ pub struct NftOfferInfo {
     pub royalty_basis_points: u16,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn wallet_nft(&self, hash: Bytes32) -> Result<Option<NftRow>> {
         let hash = hash.as_ref();
@@ -322,33 +328,15 @@ impl Database {
         Ok((dids, total_count))
     }
 
-    pub async fn offer_nft_info(&self, hash: Bytes32) -> Result<Option<NftOfferInfo>> {
-        let hash = hash.as_ref();
+}
 
-        query!(
-            "
-            SELECT
-                metadata, metadata_updater_puzzle_hash, royalty_puzzle_hash, royalty_basis_points
-            FROM nfts
-            INNER JOIN assets ON assets.id = nfts.asset_id
-            WHERE hash = ?
-            ",
-            hash
-        )
-        .fetch_optional(self.pool())
-        .await?
-        .map(|row| {
-            Ok(NftOfferInfo {
-                metadata: Program::from(row.metadata),
-                metadata_updater_puzzle_hash: row.metadata_updater_puzzle_hash.convert()?,
-                royalty_puzzle_hash: row.royalty_puzzle_hash.convert()?,
-                royalty_basis_points: row.royalty_basis_points.convert()?,
-            })
-        })
-        .transpose()
+impl<E: SqlExecutor> Database<E> {
+    pub async fn offer_nft_info(&self, hash: Bytes32) -> Result<Option<NftOfferInfo>> {
+        offer_nft_info(&self.executor, hash).await
     }
 }
 
+#[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
     pub async fn insert_nft(&mut self, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
         let hash = hash.as_ref();
@@ -514,4 +502,19 @@ impl DatabaseTx<'_> {
 
         Ok(())
     }
+}
+
+async fn offer_nft_info(mut conn: impl SqlAccess, hash: Bytes32) -> Result<Option<NftOfferInfo>> {
+    conn.fetch_all(sql_file!("nfts/offer_nft_info.sql"), vec![hash.into()])
+        .await?
+        .first()
+        .map(|row| {
+            Ok(NftOfferInfo {
+                metadata: Program::from(row.blob("metadata")?),
+                metadata_updater_puzzle_hash: row.converted("metadata_updater_puzzle_hash")?,
+                royalty_puzzle_hash: row.converted("royalty_puzzle_hash")?,
+                royalty_basis_points: row.i64("royalty_basis_points")?.convert()?,
+            })
+        })
+        .transpose()
 }

@@ -1,4 +1,6 @@
-use chia_wallet_sdk::prelude::*;
+use crate::prelude::*;
+
+use sage_database::WalletDb;
 
 use crate::{WalletError, wallet::memos::Hint};
 
@@ -40,7 +42,7 @@ impl MultiSendPayment {
     }
 }
 
-impl Wallet {
+impl<D: WalletDb> Wallet<D> {
     /// Sends XCH and CATs to the given puzzle hashes.
     pub async fn multi_send(
         &self,

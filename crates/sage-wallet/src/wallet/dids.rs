@@ -1,5 +1,5 @@
-use chia_wallet_sdk::prelude::*;
-use sage_database::{SerializePrimitive, SerializedDid};
+use crate::prelude::*;
+use sage_database::{SerializePrimitive, SerializedDid, WalletDb};
 
 use crate::{
     WalletError,
@@ -8,7 +8,7 @@ use crate::{
 
 use super::Wallet;
 
-impl Wallet {
+impl<D: WalletDb> Wallet<D> {
     pub async fn create_did(
         &self,
         fee: u64,

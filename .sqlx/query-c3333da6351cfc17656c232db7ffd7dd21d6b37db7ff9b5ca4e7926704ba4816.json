@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT parent_coin_hash, puzzle_hash, amount FROM selectable_coins WHERE asset_id = 0\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "parent_coin_hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "puzzle_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "amount",
+        "ordinal": 2,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c3333da6351cfc17656c232db7ffd7dd21d6b37db7ff9b5ca4e7926704ba4816"
+}

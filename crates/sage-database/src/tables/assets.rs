@@ -1,4 +1,5 @@
 mod asset;
+#[cfg(feature = "sqlite")]
 mod cat;
 mod did;
 mod nft;

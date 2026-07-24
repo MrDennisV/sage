@@ -1,3 +1,6 @@
+use chia_bls::PublicKey;
+use chia_protocol::Bytes32;
+
 use crate::{Convert, DatabaseError, Result};
 
 /// Includes a query from the `queries/` directory as a `&'static str`.
@@ -29,6 +32,12 @@ impl From<i64> for SqlValue {
     }
 }
 
+impl From<u32> for SqlValue {
+    fn from(value: u32) -> Self {
+        Self::Int(i64::from(value))
+    }
+}
+
 impl From<bool> for SqlValue {
     fn from(value: bool) -> Self {
         Self::Int(i64::from(value))
@@ -56,6 +65,18 @@ impl From<Vec<u8>> for SqlValue {
 impl From<&[u8]> for SqlValue {
     fn from(value: &[u8]) -> Self {
         Self::Blob(value.to_vec())
+    }
+}
+
+impl From<Bytes32> for SqlValue {
+    fn from(value: Bytes32) -> Self {
+        Self::Blob(value.as_ref().to_vec())
+    }
+}
+
+impl From<PublicKey> for SqlValue {
+    fn from(value: PublicKey) -> Self {
+        Self::Blob(value.to_bytes().to_vec())
     }
 }
 

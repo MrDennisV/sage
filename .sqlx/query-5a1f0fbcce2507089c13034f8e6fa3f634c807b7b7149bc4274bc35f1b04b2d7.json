@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n    metadata, metadata_updater_puzzle_hash, royalty_puzzle_hash, royalty_basis_points\nFROM nfts\nINNER JOIN assets ON assets.id = nfts.asset_id\nWHERE hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "metadata",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "metadata_updater_puzzle_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "royalty_puzzle_hash",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "royalty_basis_points",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5a1f0fbcce2507089c13034f8e6fa3f634c807b7b7149bc4274bc35f1b04b2d7"
+}

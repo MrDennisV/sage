@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT derivation_index, is_hardened FROM public_keys WHERE key = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "derivation_index",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_hardened",
+        "ordinal": 1,
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2f5898fba050eb0ebe7a2ee33a60ff539d0d286ca107cc7f147e6b607ca41561"
+}

@@ -1,7 +1,12 @@
+use chia_protocol::{Bytes32, Program};
+#[cfg(feature = "sqlite")]
 use chia_wallet_sdk::prelude::*;
+#[cfg(feature = "sqlite")]
 use sqlx::query;
 
-use crate::{Asset, AssetKind, CoinKind, CoinRow, Convert, Database, DatabaseTx, Result};
+#[cfg(feature = "sqlite")]
+use crate::{AssetKind, CoinKind, Convert, Database, DatabaseTx, Result};
+use crate::{Asset, CoinRow};
 
 #[derive(Debug, Clone)]
 pub struct DidCoinInfo {
@@ -17,6 +22,7 @@ pub struct DidRow {
     pub coin_row: CoinRow,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn owned_dids(&self) -> Result<Vec<DidRow>> {
         query!(
@@ -78,6 +84,7 @@ impl Database {
     }
 }
 
+#[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
     pub async fn insert_did(&mut self, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
         let hash = hash.as_ref();

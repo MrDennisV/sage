@@ -1,15 +1,20 @@
 use std::time::Duration;
 
-use chia_wallet_sdk::{chia::puzzle_types::nft::NftMetadata, prelude::*};
-use sage_database::{NftOfferInfo, OptionOfferInfo, SerializePrimitive};
+use crate::prelude::*;
+use chia_puzzle_types::nft::NftMetadata;
+use sage_database::WalletDb;
+#[cfg(feature = "native")]
+use sage_database::{Database, NftOfferInfo, OptionOfferInfo, SerializePrimitive};
+#[cfg(feature = "native")]
 use tokio::time::sleep;
 
+use crate::{Wallet, WalletError};
+#[cfg(feature = "native")]
 use crate::{
-    PuzzleContext, Wallet, WalletError, WalletPeer, fetch_minter_hash, fetch_option, insert_nft,
-    insert_option,
+    PuzzleContext, WalletPeer, fetch_minter_hash, fetch_option, insert_nft, insert_option,
 };
 
-impl Wallet {
+impl<D: WalletDb> Wallet<D> {
     pub async fn fetch_offer_cat_hidden_puzzle_hash(
         &self,
         asset_id: Bytes32,
@@ -20,7 +25,10 @@ impl Wallet {
             .await?
             .and_then(|asset| asset.hidden_puzzle_hash))
     }
+}
 
+#[cfg(feature = "native")]
+impl Wallet<Database> {
     pub async fn fetch_offer_nft_info(
         &self,
         peer: Option<&WalletPeer>,

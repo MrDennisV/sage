@@ -1,7 +1,10 @@
-use chia_wallet_sdk::prelude::*;
+use chia_protocol::Bytes32;
+#[cfg(feature = "sqlite")]
 use sqlx::{SqliteExecutor, query};
 
-use crate::{Convert, Database, DatabaseError, DatabaseTx, Result};
+use crate::{
+    Convert, Database, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssetKind {
@@ -37,6 +40,7 @@ pub struct Asset {
     pub kind: AssetKind,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn is_asset_owned(&self, hash: Bytes32) -> Result<bool> {
         let hash = hash.as_ref();
@@ -95,20 +99,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn asset_kind(&self, hash: Bytes32) -> Result<Option<AssetKind>> {
-        let hash = hash.as_ref();
-
-        query!("SELECT kind FROM assets WHERE hash = ?", hash)
-            .fetch_optional(self.pool())
-            .await?
-            .map(|row| row.kind.convert())
-            .transpose()
-    }
-
-    pub async fn asset(&self, hash: Bytes32) -> Result<Option<Asset>> {
-        asset(self.pool(), hash).await
-    }
-
     pub async fn existing_hidden_puzzle_hash(
         &self,
         asset_hash: Bytes32,
@@ -117,11 +107,24 @@ impl Database {
     }
 }
 
-impl DatabaseTx<'_> {
-    pub async fn asset(&mut self, hash: Bytes32) -> Result<Option<Asset>> {
-        asset(&mut *self.tx, hash).await
+impl<E: SqlExecutor> Database<E> {
+    pub async fn asset_kind(&self, hash: Bytes32) -> Result<Option<AssetKind>> {
+        asset_kind(&self.executor, hash).await
     }
 
+    pub async fn asset(&self, hash: Bytes32) -> Result<Option<Asset>> {
+        asset(&self.executor, hash).await
+    }
+}
+
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
+    pub async fn asset(&mut self, hash: Bytes32) -> Result<Option<Asset>> {
+        asset(&mut self.tx, hash).await
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl DatabaseTx<'_> {
     pub async fn insert_asset(&mut self, asset: Asset) -> Result<()> {
         insert_asset(&mut *self.tx, asset).await?;
 
@@ -170,6 +173,7 @@ impl DatabaseTx<'_> {
     }
 }
 
+#[cfg(feature = "sqlite")]
 async fn insert_asset(conn: impl SqliteExecutor<'_>, asset: Asset) -> Result<()> {
     let hash = asset.hash.as_ref();
     let kind = asset.kind as i64;
@@ -206,6 +210,7 @@ async fn insert_asset(conn: impl SqliteExecutor<'_>, asset: Asset) -> Result<()>
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn existing_hidden_puzzle_hash(
     conn: impl SqliteExecutor<'_>,
     asset_hash: Bytes32,
@@ -225,34 +230,31 @@ async fn existing_hidden_puzzle_hash(
     .transpose()
 }
 
-async fn asset(conn: impl SqliteExecutor<'_>, hash: Bytes32) -> Result<Option<Asset>> {
-    let hash = hash.as_ref();
+async fn asset_kind(mut conn: impl SqlAccess, hash: Bytes32) -> Result<Option<AssetKind>> {
+    conn.fetch_all(sql_file!("assets/asset_kind.sql"), vec![hash.into()])
+        .await?
+        .first()
+        .map(|row| row.i64("kind")?.convert())
+        .transpose()
+}
 
-    query!(
-        "
-        SELECT
-            hash, kind, name, ticker, precision, icon_url, description,
-            is_sensitive_content, is_visible, hidden_puzzle_hash
-        FROM assets
-        WHERE hash = ?
-        ",
-        hash
-    )
-    .fetch_optional(conn)
-    .await?
-    .map(|row| {
-        Ok(Asset {
-            hash: row.hash.convert()?,
-            kind: row.kind.convert()?,
-            name: row.name,
-            ticker: row.ticker,
-            precision: row.precision.convert()?,
-            icon_url: row.icon_url,
-            description: row.description,
-            is_sensitive_content: row.is_sensitive_content,
-            is_visible: row.is_visible,
-            hidden_puzzle_hash: row.hidden_puzzle_hash.convert()?,
+async fn asset(mut conn: impl SqlAccess, hash: Bytes32) -> Result<Option<Asset>> {
+    conn.fetch_all(sql_file!("assets/asset.sql"), vec![hash.into()])
+        .await?
+        .first()
+        .map(|row| {
+            Ok(Asset {
+                hash: row.converted("hash")?,
+                kind: row.i64("kind")?.convert()?,
+                name: row.opt_text("name")?,
+                ticker: row.opt_text("ticker")?,
+                precision: row.i64("precision")?.convert()?,
+                icon_url: row.opt_text("icon_url")?,
+                description: row.opt_text("description")?,
+                is_sensitive_content: row.i64("is_sensitive_content")? != 0,
+                is_visible: row.i64("is_visible")? != 0,
+                hidden_puzzle_hash: row.opt_converted("hidden_puzzle_hash")?,
+            })
         })
-    })
-    .transpose()
+        .transpose()
 }

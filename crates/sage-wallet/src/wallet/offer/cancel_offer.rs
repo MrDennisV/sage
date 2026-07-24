@@ -1,8 +1,10 @@
-use chia_wallet_sdk::prelude::*;
+use crate::prelude::*;
+
+use sage_database::WalletDb;
 
 use crate::{Wallet, WalletError};
 
-impl Wallet {
+impl<D: WalletDb> Wallet<D> {
     pub async fn cancel_offer(
         &self,
         spend_bundle: SpendBundle,

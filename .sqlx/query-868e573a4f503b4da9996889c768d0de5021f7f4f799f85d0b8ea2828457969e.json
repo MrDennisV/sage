@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n    hash, kind, name, ticker, precision, icon_url, description,\n    is_sensitive_content, is_visible, hidden_puzzle_hash\nFROM assets\nWHERE hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kind",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "ticker",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "precision",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "icon_url",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_sensitive_content",
+        "ordinal": 7,
+        "type_info": "Bool"
+      },
+      {
+        "name": "is_visible",
+        "ordinal": 8,
+        "type_info": "Bool"
+      },
+      {
+        "name": "hidden_puzzle_hash",
+        "ordinal": 9,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "868e573a4f503b4da9996889c768d0de5021f7f4f799f85d0b8ea2828457969e"
+}

@@ -1,8 +1,8 @@
 use chia_bls::PublicKey;
 use chia_protocol::Bytes32;
+use chia_sdk_driver::OptionType;
 #[cfg(feature = "sqlite")]
 use chia_sdk_driver::{ClawbackV2, OptionUnderlying};
-use chia_sdk_driver::OptionType;
 #[cfg(feature = "sqlite")]
 use chia_wallet_sdk::{
     clvm_utils::ToTreeHash,
@@ -11,9 +11,9 @@ use chia_wallet_sdk::{
 #[cfg(feature = "sqlite")]
 use sqlx::{SqliteExecutor, query};
 
-#[cfg(feature = "sqlite")]
-use crate::Database;
-use crate::{Convert, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
+use crate::{
+    Convert, Database, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum P2PuzzleKind {
@@ -65,67 +65,12 @@ pub struct DerivationRow {
 
 #[cfg(feature = "sqlite")]
 impl Database {
-    pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
-        public_key(self.pool(), p2_puzzle_hash).await
-    }
-
     pub async fn custody_p2_puzzle_hashes(&self) -> Result<Vec<Bytes32>> {
         custody_p2_puzzle_hashes(self.pool()).await
     }
 
-    pub async fn is_custody_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_custody_p2_puzzle_hash(self.pool(), puzzle_hash).await
-    }
-
     pub async fn is_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
         is_p2_puzzle_hash(self.pool(), puzzle_hash).await
-    }
-
-    pub async fn p2_puzzle(&self, puzzle_hash: Bytes32) -> Result<P2Puzzle> {
-        match p2_puzzle_kind(self.pool(), puzzle_hash).await? {
-            P2PuzzleKind::PublicKey => {
-                let Some(key) = public_key(self.pool(), puzzle_hash).await? else {
-                    return Err(DatabaseError::PublicKeyNotFound);
-                };
-
-                Ok(P2Puzzle::PublicKey(key))
-            }
-            P2PuzzleKind::Clawback => {
-                Ok(P2Puzzle::Clawback(clawback(self.pool(), puzzle_hash).await?))
-            }
-            P2PuzzleKind::Option => {
-                let launcher_id = underlying_launcher_id(self.pool(), puzzle_hash).await?;
-                let underlying = self
-                    .option_underlying(launcher_id)
-                    .await?
-                    .ok_or(DatabaseError::OptionUnderlyingNotFound)?;
-
-                let Some(key) = public_key(self.pool(), underlying.creator_puzzle_hash).await?
-                else {
-                    return Err(DatabaseError::PublicKeyNotFound);
-                };
-
-                Ok(P2Puzzle::Option(Underlying {
-                    public_key: key,
-                    launcher_id,
-                    creator_puzzle_hash: underlying.creator_puzzle_hash,
-                    seconds: underlying.seconds,
-                    amount: underlying.amount,
-                    strike_type: underlying.strike_type,
-                }))
-            }
-            P2PuzzleKind::Arbor => {
-                let Some(key) = arbor_key(self.pool(), puzzle_hash).await? else {
-                    return Err(DatabaseError::PublicKeyNotFound);
-                };
-
-                Ok(P2Puzzle::Arbor(key))
-            }
-        }
-    }
-
-    pub async fn derivation(&self, public_key: PublicKey) -> Result<Option<Derivation>> {
-        derivation(self.pool(), public_key).await
     }
 
     pub async fn derivations(
@@ -142,26 +87,67 @@ impl Database {
     }
 }
 
+impl<E: SqlExecutor> Database<E> {
+    pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
+        public_key(&self.executor, p2_puzzle_hash).await
+    }
+
+    pub async fn is_custody_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
+        is_custody_p2_puzzle_hash(&self.executor, puzzle_hash).await
+    }
+
+    pub async fn p2_puzzle(&self, puzzle_hash: Bytes32) -> Result<P2Puzzle> {
+        match p2_puzzle_kind(&self.executor, puzzle_hash).await? {
+            P2PuzzleKind::PublicKey => {
+                let Some(key) = public_key(&self.executor, puzzle_hash).await? else {
+                    return Err(DatabaseError::PublicKeyNotFound);
+                };
+
+                Ok(P2Puzzle::PublicKey(key))
+            }
+            P2PuzzleKind::Clawback => Ok(P2Puzzle::Clawback(
+                clawback(&self.executor, puzzle_hash).await?,
+            )),
+            P2PuzzleKind::Option => {
+                let launcher_id = underlying_launcher_id(&self.executor, puzzle_hash).await?;
+                let underlying = self
+                    .option_underlying(launcher_id)
+                    .await?
+                    .ok_or(DatabaseError::OptionUnderlyingNotFound)?;
+
+                let Some(key) = public_key(&self.executor, underlying.creator_puzzle_hash).await?
+                else {
+                    return Err(DatabaseError::PublicKeyNotFound);
+                };
+
+                Ok(P2Puzzle::Option(Underlying {
+                    public_key: key,
+                    launcher_id,
+                    creator_puzzle_hash: underlying.creator_puzzle_hash,
+                    seconds: underlying.seconds,
+                    amount: underlying.amount,
+                    strike_type: underlying.strike_type,
+                }))
+            }
+            P2PuzzleKind::Arbor => {
+                let Some(key) = arbor_key(&self.executor, puzzle_hash).await? else {
+                    return Err(DatabaseError::PublicKeyNotFound);
+                };
+
+                Ok(P2Puzzle::Arbor(key))
+            }
+        }
+    }
+
+    pub async fn derivation(&self, public_key: PublicKey) -> Result<Option<Derivation>> {
+        derivation(&self.executor, public_key).await
+    }
+}
+
 #[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
-    pub async fn custody_p2_puzzle_hash(
-        &mut self,
-        derivation_index: u32,
-        is_hardened: bool,
-    ) -> Result<Bytes32> {
-        custody_p2_puzzle_hash(&mut *self.tx, derivation_index, is_hardened).await
-    }
-
-    pub async fn is_custody_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_custody_p2_puzzle_hash(&mut *self.tx, puzzle_hash).await
-    }
-
     pub async fn is_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
         is_p2_puzzle_hash(&mut *self.tx, puzzle_hash).await
-    }
-
-    pub async fn unused_derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
-        unused_derivation_index(&mut *self.tx, is_hardened).await
     }
 
     pub async fn insert_custody_p2_puzzle(
@@ -187,6 +173,22 @@ impl DatabaseTx<'_> {
 }
 
 impl<E: SqlExecutor> DatabaseTx<'_, E> {
+    pub async fn custody_p2_puzzle_hash(
+        &mut self,
+        derivation_index: u32,
+        is_hardened: bool,
+    ) -> Result<Bytes32> {
+        custody_p2_puzzle_hash(&mut self.tx, derivation_index, is_hardened).await
+    }
+
+    pub async fn is_custody_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
+        is_custody_p2_puzzle_hash(&mut self.tx, puzzle_hash).await
+    }
+
+    pub async fn unused_derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
+        unused_derivation_index(&mut self.tx, is_hardened).await
+    }
+
     pub async fn derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
         derivation_index(&mut self.tx, is_hardened).await
     }
@@ -202,41 +204,31 @@ async fn custody_p2_puzzle_hashes(conn: impl SqliteExecutor<'_>) -> Result<Vec<B
         .collect()
 }
 
-#[cfg(feature = "sqlite")]
 async fn custody_p2_puzzle_hash(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     derivation_index: u32,
     is_hardened: bool,
 ) -> Result<Bytes32> {
-    query!(
-        "
-        SELECT hash FROM p2_puzzles
-        INNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id
-        WHERE public_keys.derivation_index = ? AND public_keys.is_hardened = ?
-        ",
-        derivation_index,
-        is_hardened
+    conn.fetch_all(
+        sql_file!("p2_puzzles/custody_p2_puzzle_hash.sql"),
+        vec![derivation_index.into(), is_hardened.into()],
     )
-    .fetch_one(conn)
     .await?
-    .hash
-    .convert()
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .converted("hash")
 }
 
-#[cfg(feature = "sqlite")]
-async fn is_custody_p2_puzzle_hash(
-    conn: impl SqliteExecutor<'_>,
-    puzzle_hash: Bytes32,
-) -> Result<bool> {
-    let puzzle_hash = puzzle_hash.as_ref();
-
-    Ok(query!(
-        "SELECT COUNT(*) AS count FROM p2_puzzles WHERE hash = ? AND kind IN (0, 3)",
-        puzzle_hash
-    )
-    .fetch_one(conn)
-    .await?
-    .count
+async fn is_custody_p2_puzzle_hash(mut conn: impl SqlAccess, puzzle_hash: Bytes32) -> Result<bool> {
+    Ok(conn
+        .fetch_all(
+            sql_file!("p2_puzzles/is_custody_p2_puzzle_hash.sql"),
+            vec![puzzle_hash.into()],
+        )
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
         > 0)
 }
 
@@ -273,8 +265,8 @@ async fn max_derivation_index(
 ) -> Result<Option<u32>> {
     let row = query!(
         "
-        SELECT MAX(derivation_index) AS derivation_index 
-        FROM public_keys 
+        SELECT MAX(derivation_index) AS derivation_index
+        FROM public_keys
         WHERE is_hardened = ?
         ",
         is_hardened
@@ -330,20 +322,15 @@ async fn derivations(
     Ok((derivations, total_count))
 }
 
-#[cfg(feature = "sqlite")]
-async fn unused_derivation_index(conn: impl SqliteExecutor<'_>, is_hardened: bool) -> Result<u32> {
-    query!(
-        "
-        SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index
-        FROM public_keys
-        INNER JOIN coins ON coins.p2_puzzle_id = public_keys.p2_puzzle_id
-        WHERE is_hardened = ?
-        ",
-        is_hardened
+async fn unused_derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result<u32> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/unused_derivation_index.sql"),
+        vec![is_hardened.into()],
     )
-    .fetch_one(conn)
     .await?
-    .derivation_index
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .i64("derivation_index")?
     .convert()
 }
 
@@ -465,18 +452,17 @@ async fn insert_arbor_p2_puzzle(conn: impl SqliteExecutor<'_>, key: PublicKey) -
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn p2_puzzle_kind(
-    conn: impl SqliteExecutor<'_>,
-    p2_puzzle_hash: Bytes32,
-) -> Result<P2PuzzleKind> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!("SELECT kind FROM p2_puzzles WHERE hash = ?", p2_puzzle_hash)
-        .fetch_one(conn)
+async fn p2_puzzle_kind(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<P2PuzzleKind> {
+    let rows = conn
+        .fetch_all(
+            sql_file!("p2_puzzles/p2_puzzle_kind.sql"),
+            vec![p2_puzzle_hash.into()],
+        )
         .await?;
 
-    Ok(match row.kind {
+    let row = rows.first().ok_or(DatabaseError::RowNotFound)?;
+
+    Ok(match row.i64("kind")? {
         0 => P2PuzzleKind::PublicKey,
         1 => P2PuzzleKind::Clawback,
         2 => P2PuzzleKind::Option,
@@ -485,124 +471,69 @@ async fn p2_puzzle_kind(
     })
 }
 
-#[cfg(feature = "sqlite")]
-async fn public_key(
-    conn: impl SqliteExecutor<'_>,
-    p2_puzzle_hash: Bytes32,
-) -> Result<Option<PublicKey>> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!(
-        "
-        SELECT key
-        FROM p2_puzzles
-        INNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
+async fn public_key(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/public_key.sql"),
+        vec![p2_puzzle_hash.into()],
     )
-    .fetch_optional(conn)
-    .await?;
-
-    row.map(|row| row.key.convert()).transpose()
+    .await?
+    .first()
+    .map(|row| row.converted("key"))
+    .transpose()
 }
 
-#[cfg(feature = "sqlite")]
-async fn clawback(conn: impl SqliteExecutor<'_>, p2_puzzle_hash: Bytes32) -> Result<Clawback> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!(
-        "
-        SELECT key AS 'key?', sender_puzzle_hash, receiver_puzzle_hash, expiration_seconds
-        FROM p2_puzzles
-        INNER JOIN clawbacks ON clawbacks.p2_puzzle_id = p2_puzzles.id
-        LEFT JOIN public_keys ON public_keys.p2_puzzle_id IN (
-            SELECT id FROM p2_puzzles
-            WHERE (hash = sender_puzzle_hash AND unixepoch() < expiration_seconds)
-            OR (hash = receiver_puzzle_hash AND unixepoch() >= expiration_seconds)
-            LIMIT 1
+async fn clawback(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<Clawback> {
+    let rows = conn
+        .fetch_all(
+            sql_file!("p2_puzzles/clawback.sql"),
+            vec![p2_puzzle_hash.into()],
         )
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
-    )
-    .fetch_one(conn)
-    .await?;
+        .await?;
+
+    let row = rows.first().ok_or(DatabaseError::RowNotFound)?;
 
     Ok(Clawback {
-        public_key: row.key.convert()?,
-        sender_puzzle_hash: row.sender_puzzle_hash.convert()?,
-        receiver_puzzle_hash: row.receiver_puzzle_hash.convert()?,
-        seconds: row.expiration_seconds.convert()?,
+        public_key: row.opt_converted("key")?,
+        sender_puzzle_hash: row.converted("sender_puzzle_hash")?,
+        receiver_puzzle_hash: row.converted("receiver_puzzle_hash")?,
+        seconds: row.i64("expiration_seconds")?.convert()?,
     })
 }
 
-#[cfg(feature = "sqlite")]
 async fn underlying_launcher_id(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     p2_puzzle_hash: Bytes32,
 ) -> Result<Bytes32> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    query!(
-        "
-        SELECT assets.hash AS launcher_id
-        FROM p2_puzzles
-        INNER JOIN p2_options ON p2_options.p2_puzzle_id = p2_puzzles.id
-        INNER JOIN options ON options.asset_id = p2_options.option_asset_id
-        INNER JOIN assets ON assets.id = options.asset_id
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
+    conn.fetch_all(
+        sql_file!("p2_puzzles/underlying_launcher_id.sql"),
+        vec![p2_puzzle_hash.into()],
     )
-    .fetch_one(conn)
     .await?
-    .launcher_id
-    .convert()
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .converted("launcher_id")
 }
 
-#[cfg(feature = "sqlite")]
-async fn arbor_key(
-    conn: impl SqliteExecutor<'_>,
-    p2_puzzle_hash: Bytes32,
-) -> Result<Option<PublicKey>> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!(
-        "
-        SELECT key
-        FROM p2_puzzles
-        INNER JOIN p2_arbor ON p2_arbor.p2_puzzle_id = p2_puzzles.id
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
+async fn arbor_key(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/arbor_key.sql"),
+        vec![p2_puzzle_hash.into()],
     )
-    .fetch_optional(conn)
-    .await?;
-
-    row.map(|row| row.key.convert()).transpose()
+    .await?
+    .first()
+    .map(|row| row.converted("key"))
+    .transpose()
 }
 
-#[cfg(feature = "sqlite")]
-async fn derivation(
-    conn: impl SqliteExecutor<'_>,
-    public_key: PublicKey,
-) -> Result<Option<Derivation>> {
-    let public_key = public_key.to_bytes();
-    let public_key = public_key.as_ref();
-
-    let Some(row) = query!(
-        "SELECT derivation_index, is_hardened FROM public_keys WHERE key = ?",
-        public_key
-    )
-    .fetch_optional(conn)
-    .await?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(Derivation {
-        derivation_index: row.derivation_index.convert()?,
-        is_hardened: row.is_hardened,
-    }))
+async fn derivation(mut conn: impl SqlAccess, public_key: PublicKey) -> Result<Option<Derivation>> {
+    conn.fetch_all(sql_file!("p2_puzzles/derivation.sql"), vec![public_key.into()])
+        .await?
+        .first()
+        .map(|row| {
+            Ok(Derivation {
+                derivation_index: row.i64("derivation_index")?.convert()?,
+                is_hardened: row.i64("is_hardened")? != 0,
+            })
+        })
+        .transpose()
 }

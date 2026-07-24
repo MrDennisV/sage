@@ -1,17 +1,15 @@
-use chia_wallet_sdk::{
-    driver::{
-        TransferNftById, calculate_royalty_payments, calculate_trade_price_amounts,
-        calculate_trade_prices,
-    },
-    prelude::*,
+use crate::prelude::*;
+use chia_sdk_driver::{
+    TransferNftById, calculate_royalty_payments, calculate_trade_price_amounts,
+    calculate_trade_prices,
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
-use sage_database::NftOfferInfo;
+use sage_database::{NftOfferInfo, WalletDb};
 
 use crate::{Wallet, WalletError};
 
-impl Wallet {
+impl<D: WalletDb> Wallet<D> {
     pub async fn take_offer(
         &self,
         spend_bundle: SpendBundle,

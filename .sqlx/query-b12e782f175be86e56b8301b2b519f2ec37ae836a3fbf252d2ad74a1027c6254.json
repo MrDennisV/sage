@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n    parent_coin_hash, puzzle_hash, amount, asset_hidden_puzzle_hash,\n    p2_puzzle_hash, parent_parent_coin_hash, parent_inner_puzzle_hash,\n    parent_amount\nFROM selectable_coins\nINNER JOIN lineage_proofs ON lineage_proofs.coin_id = selectable_coins.coin_id\nWHERE asset_hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "parent_coin_hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "puzzle_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "amount",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "asset_hidden_puzzle_hash",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "p2_puzzle_hash",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "parent_parent_coin_hash",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "parent_inner_puzzle_hash",
+        "ordinal": 6,
+        "type_info": "Blob"
+      },
+      {
+        "name": "parent_amount",
+        "ordinal": 7,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b12e782f175be86e56b8301b2b519f2ec37ae836a3fbf252d2ad74a1027c6254"
+}

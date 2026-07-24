@@ -1,8 +1,6 @@
-#[cfg(feature = "sqlite")]
 mod assets;
 #[cfg(feature = "sqlite")]
 mod blocks;
-#[cfg(feature = "sqlite")]
 mod coins;
 #[cfg(feature = "sqlite")]
 mod collections;
@@ -16,9 +14,7 @@ mod p2_puzzles;
 #[cfg(feature = "sqlite")]
 mod transactions;
 
-#[cfg(feature = "sqlite")]
 pub use assets::*;
-#[cfg(feature = "sqlite")]
 pub use coins::*;
 #[cfg(feature = "sqlite")]
 pub use collections::*;

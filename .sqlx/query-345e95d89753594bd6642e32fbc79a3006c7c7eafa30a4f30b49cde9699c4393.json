@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index\nFROM public_keys\nINNER JOIN coins ON coins.p2_puzzle_id = public_keys.p2_puzzle_id\nWHERE is_hardened = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "derivation_index",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "345e95d89753594bd6642e32fbc79a3006c7c7eafa30a4f30b49cde9699c4393"
+}

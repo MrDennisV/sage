@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT hash FROM p2_puzzles\nINNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id\nWHERE public_keys.derivation_index = ? AND public_keys.is_hardened = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aed1db2b7e54809640fdd00242973da6c116bfef8baeb110979760128a45fd6e"
+}
