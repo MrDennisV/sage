@@ -1,16 +1,23 @@
 // The SQL side of the wasm bridge: a sql.js database owned by the service
-// worker, persisted as a single image into IndexedDB. The schema comes from
-// the Rust migrations (sage-database), never from TypeScript.
-import initSqlJs, { Database } from 'sql.js';
+// worker, persisted as an image into IndexedDB. Each wallet and network pair
+// has its own database, mirroring how desktop stores one SQLite file per
+// fingerprint and network. The schema comes from the Rust migrations
+// (sage-database), never from TypeScript.
+import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
 
 const IDB_NAME = 'sage_db';
 const IDB_STORE = 'database';
-const IDB_KEY = 'main';
 const PERSIST_DEBOUNCE_MS = 500;
 
+let sql: SqlJsStatic | null = null;
 let db: Database | null = null;
+let dbKey: string | null = null;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let persisting: Promise<void> = Promise.resolve();
+
+export function databaseKey(fingerprint: number, networkId: string): string {
+  return `${fingerprint}_${networkId}`;
+}
 
 type JsSqlValue =
   | { type: 'null' }
@@ -30,27 +37,37 @@ function openIdb(): Promise<IDBDatabase> {
   });
 }
 
-async function loadImage(): Promise<Uint8Array | null> {
+async function loadImage(key: string): Promise<Uint8Array | null> {
   const idb = await openIdb();
   return new Promise((resolve, reject) => {
     const request = idb
       .transaction(IDB_STORE, 'readonly')
       .objectStore(IDB_STORE)
-      .get(IDB_KEY);
+      .get(key);
     request.onsuccess = () =>
       resolve(request.result ? new Uint8Array(request.result) : null);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function saveImage(image: Uint8Array): Promise<void> {
+async function saveImage(key: string, image: Uint8Array): Promise<void> {
   const idb = await openIdb();
   return new Promise((resolve, reject) => {
     const tx = idb.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(image.buffer, IDB_KEY);
+    tx.objectStore(IDB_STORE).put(image.buffer, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+function persistNow() {
+  const key = dbKey;
+  const database = db;
+
+  if (!key || !database) return;
+
+  const image = database.export();
+  persisting = persisting.then(() => saveImage(key, image));
 }
 
 function schedulePersist(immediate: boolean) {
@@ -59,14 +76,10 @@ function schedulePersist(immediate: boolean) {
     persistTimer = null;
   }
 
-  const run = () => {
-    persisting = persisting.then(() => (db ? saveImage(db.export()) : undefined));
-  };
-
   if (immediate) {
-    run();
+    persistNow();
   } else {
-    persistTimer = setTimeout(run, PERSIST_DEBOUNCE_MS);
+    persistTimer = setTimeout(persistNow, PERSIST_DEBOUNCE_MS);
   }
 }
 
@@ -75,9 +88,7 @@ export async function flushDb(): Promise<void> {
   if (persistTimer) {
     clearTimeout(persistTimer);
     persistTimer = null;
-    persisting = persisting.then(() =>
-      db ? saveImage(db.export()) : undefined,
-    );
+    persistNow();
   }
   await persisting;
 }
@@ -182,8 +193,8 @@ export function registerSqlBridge() {
   };
 }
 
-export async function initDatabase(): Promise<void> {
-  if (db) return;
+export async function initSqlEngine(): Promise<void> {
+  if (sql) return;
 
   // sql.js falls back to XMLHttpRequest when given a file path, which doesn't
   // exist in service workers, so fetch the wasm binary ourselves.
@@ -191,9 +202,26 @@ export async function initDatabase(): Promise<void> {
     await fetch(chrome.runtime.getURL('wasm/sql-wasm.wasm'))
   ).arrayBuffer();
 
-  const SQL = await initSqlJs({ wasmBinary } as never);
-
-  const image = await loadImage();
-  db = image ? new SQL.Database(image) : new SQL.Database();
+  sql = await initSqlJs({ wasmBinary } as never);
   registerSqlBridge();
+}
+
+/**
+ * Makes the database for a wallet and network pair the active one, persisting
+ * and closing the previous database first. Returns true when the database was
+ * created empty, meaning migrations still have to run against it.
+ */
+export async function selectDatabase(key: string): Promise<boolean> {
+  if (dbKey === key) return false;
+
+  if (!sql) throw new Error('sql engine is not initialized');
+
+  await flushDb();
+  db?.close();
+
+  const image = await loadImage(key);
+  db = image ? new sql.Database(image) : new sql.Database();
+  dbKey = key;
+
+  return image === null;
 }

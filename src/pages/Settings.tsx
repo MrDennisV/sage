@@ -149,12 +149,14 @@ export default function Settings() {
                     <Trans>Network</Trans>
                   </TabsTrigger>
 
-                  <TabsTrigger
-                    value='advanced'
-                    className='flex-1 md:flex-none rounded-md px-3 py-1 text-sm font-medium'
-                  >
-                    <Trans>Advanced</Trans>
-                  </TabsTrigger>
+                  {!__IS_EXTENSION__ && (
+                    <TabsTrigger
+                      value='advanced'
+                      className='flex-1 md:flex-none rounded-md px-3 py-1 text-sm font-medium'
+                    >
+                      <Trans>Advanced</Trans>
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
             </div>
@@ -196,12 +198,14 @@ export default function Settings() {
                 <NetworkSettings />
               </TabsContent>
 
-              <TabsContent value='advanced'>
-                <div className='grid gap-4'>
-                  {!isMobile && <RpcSettings />}
-                  <LogViewer />
-                </div>
-              </TabsContent>
+              {!__IS_EXTENSION__ && (
+                <TabsContent value='advanced'>
+                  <div className='grid gap-4'>
+                    {!isMobile && <RpcSettings />}
+                    <LogViewer />
+                  </div>
+                </TabsContent>
+              )}
             </div>
           </Tabs>
         </div>
@@ -607,47 +611,51 @@ function NetworkSettings() {
         }
       />
 
-      <SettingItem
-        label={t`Discover Peers`}
-        description={t`Automatically discover and connect to peers`}
-        control={
-          <Switch
-            checked={discoverPeers ?? config?.discover_peers ?? true}
-            onCheckedChange={(checked) => {
-              commands
-                .setDiscoverPeers({ discover_peers: checked })
-                .catch(addError)
-                .finally(() => setDiscoverPeers(checked));
-            }}
+      {!__IS_EXTENSION__ && (
+        <>
+          <SettingItem
+            label={t`Discover Peers`}
+            description={t`Automatically discover and connect to peers`}
+            control={
+              <Switch
+                checked={discoverPeers ?? config?.discover_peers ?? true}
+                onCheckedChange={(checked) => {
+                  commands
+                    .setDiscoverPeers({ discover_peers: checked })
+                    .catch(addError)
+                    .finally(() => setDiscoverPeers(checked));
+                }}
+              />
+            }
           />
-        }
-      />
 
-      <SettingItem
-        label={t`Target Peers`}
-        description={t`Number of peers to maintain connections with`}
-        control={
-          <Input
-            type='number'
-            className='w-[120px]'
-            value={targetPeersText ?? config?.target_peers ?? 500}
-            disabled={!(discoverPeers ?? config?.discover_peers)}
-            onChange={(event) => setTargetPeersText(event.target.value)}
-            onBlur={() => {
-              if (invalidTargetPeers) return;
+          <SettingItem
+            label={t`Target Peers`}
+            description={t`Number of peers to maintain connections with`}
+            control={
+              <Input
+                type='number'
+                className='w-[120px]'
+                value={targetPeersText ?? config?.target_peers ?? 500}
+                disabled={!(discoverPeers ?? config?.discover_peers)}
+                onChange={(event) => setTargetPeersText(event.target.value)}
+                onBlur={() => {
+                  if (invalidTargetPeers) return;
 
-              if (targetPeers !== config?.target_peers) {
-                if (config) {
-                  setConfig({ ...config, target_peers: targetPeers });
-                }
-                commands
-                  .setTargetPeers({ target_peers: targetPeers })
-                  .catch(addError);
-              }
-            }}
+                  if (targetPeers !== config?.target_peers) {
+                    if (config) {
+                      setConfig({ ...config, target_peers: targetPeers });
+                    }
+                    commands
+                      .setTargetPeers({ target_peers: targetPeers })
+                      .catch(addError);
+                  }
+                }}
+              />
+            }
           />
-        }
-      />
+        </>
+      )}
     </SettingsSection>
   );
 }

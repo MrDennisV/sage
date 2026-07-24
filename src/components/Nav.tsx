@@ -153,17 +153,21 @@ export function BottomNav({ isCollapsed }: NavProps) {
       aria-label={t`Secondary navigation`}
     >
       <NavLink
-        url={'/peers'}
+        url={__IS_EXTENSION__ ? '/settings?tab=network' : '/peers'}
         isCollapsed={isCollapsed}
         message={
           isSynced ? (
-            <>
-              {peerMaxHeight ? (
-                <Trans>{peerCount} peers synced</Trans>
-              ) : (
-                <Trans>Connecting...</Trans>
-              )}
-            </>
+            __IS_EXTENSION__ ? (
+              <Trans>Synced</Trans>
+            ) : (
+              <>
+                {peerMaxHeight ? (
+                  <Trans>{peerCount} peers synced</Trans>
+                ) : (
+                  <Trans>Connecting...</Trans>
+                )}
+              </>
+            )
           ) : coinsSynced ? (
             <Trans>
               Downloading {checkedFiles} / {totalFiles}
@@ -176,7 +180,11 @@ export function BottomNav({ isCollapsed }: NavProps) {
         }
         customTooltip={
           <>
-            {peerCount} {peerCount === 1 ? t`peer` : t`peers`}{' '}
+            {!__IS_EXTENSION__ && (
+              <>
+                {peerCount} {peerCount === 1 ? t`peer` : t`peers`}{' '}
+              </>
+            )}
             {isSynced ? (
               peerMaxHeight ? (
                 <Trans>synced to peak {peerMaxHeight}</Trans>
@@ -191,7 +199,7 @@ export function BottomNav({ isCollapsed }: NavProps) {
           </>
         }
       >
-        {isSynced && peerMaxHeight > 0 ? (
+        {isSynced && (__IS_EXTENSION__ || peerMaxHeight > 0) ? (
           <MonitorCheck
             className={`${className} text-emerald-600`}
             aria-hidden='true'

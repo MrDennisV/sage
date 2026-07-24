@@ -3,6 +3,7 @@ use std::{cell::RefCell, path::PathBuf};
 use sage::Sage;
 use sage_database::Database;
 use sage_keychain::Keychain;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use crate::{BrowserExecutor, BrowserStore, js_error};
@@ -17,22 +18,50 @@ pub(crate) fn not_initialized() -> JsValue {
     JsValue::from_str("sage is not initialized; call sage_init first")
 }
 
-/// Creates the Sage instance over the browser bridges: runs the database
-/// migrations, then loads the keychain and config files from the store. An
-/// empty `network_id` keeps the stored (or default) network.
+/// Creates the Sage instance over the browser bridges, loading the keychain
+/// and config files from the store. An empty `network_id` keeps the stored
+/// (or default) network. The database is selected separately, since each
+/// wallet and network pair has its own database.
 #[wasm_bindgen]
 pub async fn sage_init(network_id: String) -> Result<(), JsValue> {
     let mut sage = Sage::with_store(Box::new(BrowserStore), PathBuf::new());
-
-    sage_database::run_migrations(&BrowserExecutor)
-        .await
-        .map_err(js_error)?;
 
     load_stored_state(&mut sage, &network_id).map_err(js_error)?;
 
     SAGE.with(|cell| cell.replace(Some(sage)));
 
     Ok(())
+}
+
+/// The wallet and network the stored config points at, so the caller can
+/// select the matching database before logging in.
+#[derive(Debug, Serialize)]
+pub struct Session {
+    pub fingerprint: Option<u32>,
+    pub network_id: String,
+}
+
+#[wasm_bindgen]
+pub fn sage_session() -> Result<String, JsValue> {
+    SAGE.with(|cell| {
+        let guard = cell.borrow();
+        let sage = guard.as_ref().ok_or_else(not_initialized)?;
+
+        serde_json::to_string(&Session {
+            fingerprint: sage.config.global.fingerprint,
+            network_id: sage.network_id(),
+        })
+        .map_err(js_error)
+    })
+}
+
+/// Applies the schema migrations to the currently selected database. The
+/// caller selects which database is active before calling this.
+#[wasm_bindgen]
+pub async fn sage_prepare_database() -> Result<(), JsValue> {
+    sage_database::run_migrations(&BrowserExecutor)
+        .await
+        .map_err(js_error)
 }
 
 /// Logs into a wallet by fingerprint, building the wallet over the browser

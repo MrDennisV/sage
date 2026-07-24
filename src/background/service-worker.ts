@@ -5,34 +5,68 @@ import init, {
   sage_handle,
   sage_init,
   sage_login,
+  sage_prepare_database,
+  sage_session,
   sage_sync_once,
 } from '../extension/wasm/sage_wasm';
 
 import { flushKv, initKvStore } from './kv-store';
-import { flushDb, initDatabase } from './sql-store';
+import { databaseKey, flushDb, initSqlEngine, selectDatabase } from './sql-store';
 
-const NETWORK_ID = 'testnet11';
 const SYNC_ALARM = 'sage-sync';
 const SYNC_PERIOD_MINUTES = 0.5;
+
+interface Session {
+  fingerprint: number | null;
+  network_id: string;
+}
 
 let booted: Promise<void> | null = null;
 
 // Commands whose writes must be durable before we respond.
 const FLUSH_COMMANDS = new Set([
-  'login',
   'import_key',
   'delete_key',
-  'generate_mnemonic',
+  'rename_key',
+  'set_wallet_emoji',
+  'logout',
+  'set_network',
   'send_xch',
   'send_cat',
 ]);
 
+// Commands that change which wallet or network is active, so the matching
+// database has to be selected before the next query runs.
+const SESSION_COMMANDS = new Set(['set_network', 'switch_wallet', 'import_key']);
+
+function session(): Session {
+  return JSON.parse(sage_session());
+}
+
+/** Points the SQL bridge at the database for the active wallet and network. */
+async function useSessionDatabase(): Promise<boolean> {
+  const { fingerprint, network_id: networkId } = session();
+
+  if (fingerprint === null) return false;
+
+  if (await selectDatabase(databaseKey(fingerprint, networkId))) {
+    await sage_prepare_database();
+  }
+
+  await sage_login(fingerprint);
+
+  return true;
+}
+
 function boot(): Promise<void> {
   booted ??= (async () => {
-    await initDatabase();
+    await initSqlEngine();
     await initKvStore();
-    await init({ module_or_path: chrome.runtime.getURL('wasm/sage_wasm_bg.wasm') });
-    await sage_init(NETWORK_ID);
+    await init({
+      module_or_path: chrome.runtime.getURL('wasm/sage_wasm_bg.wasm'),
+    });
+    await sage_init('');
+    await useSessionDatabase();
   })();
 
   return booted;
@@ -40,6 +74,8 @@ function boot(): Promise<void> {
 
 async function syncOnce(): Promise<void> {
   await boot();
+
+  if (session().fingerprint === null) return;
 
   const events: unknown[] = JSON.parse(await sage_sync_once(true));
 
@@ -70,15 +106,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     const { cmd, args } = message as { cmd: string; args: unknown };
 
-    if (cmd === 'login') {
-      await sage_login(Number((args as { fingerprint: number }).fingerprint));
+    const response = JSON.parse(
+      await sage_handle(cmd, JSON.stringify(args ?? {})),
+    );
+
+    if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
+      await useSessionDatabase();
       syncOnce().catch((error) => console.error('sync failed', error));
-      return {};
     }
 
-    const response = JSON.parse(await sage_handle(cmd, JSON.stringify(args ?? {})));
-
-    if (FLUSH_COMMANDS.has(cmd)) {
+    if (FLUSH_COMMANDS.has(cmd) || cmd === 'login') {
       await flushKv();
       await flushDb();
     }
