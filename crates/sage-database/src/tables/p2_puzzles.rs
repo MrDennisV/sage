@@ -1,7 +1,19 @@
-use chia_wallet_sdk::{prelude::*, types::puzzles::P2DelegatedConditionsArgs};
+use chia_bls::PublicKey;
+use chia_protocol::Bytes32;
+#[cfg(feature = "sqlite")]
+use chia_sdk_driver::{ClawbackV2, OptionUnderlying};
+use chia_sdk_driver::OptionType;
+#[cfg(feature = "sqlite")]
+use chia_wallet_sdk::{
+    clvm_utils::ToTreeHash,
+    types::{Mod, puzzles::P2DelegatedConditionsArgs},
+};
+#[cfg(feature = "sqlite")]
 use sqlx::{SqliteExecutor, query};
 
-use crate::{Convert, Database, DatabaseError, DatabaseTx, Result};
+#[cfg(feature = "sqlite")]
+use crate::Database;
+use crate::{Convert, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum P2PuzzleKind {
@@ -51,6 +63,7 @@ pub struct DerivationRow {
     pub synthetic_key: PublicKey,
 }
 
+#[cfg(feature = "sqlite")]
 impl Database {
     pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
         public_key(self.pool(), p2_puzzle_hash).await
@@ -129,6 +142,7 @@ impl Database {
     }
 }
 
+#[cfg(feature = "sqlite")]
 impl DatabaseTx<'_> {
     pub async fn custody_p2_puzzle_hash(
         &mut self,
@@ -144,10 +158,6 @@ impl DatabaseTx<'_> {
 
     pub async fn is_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
         is_p2_puzzle_hash(&mut *self.tx, puzzle_hash).await
-    }
-
-    pub async fn derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
-        derivation_index(&mut *self.tx, is_hardened).await
     }
 
     pub async fn unused_derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
@@ -176,6 +186,13 @@ impl DatabaseTx<'_> {
     }
 }
 
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
+    pub async fn derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
+        derivation_index(&mut self.tx, is_hardened).await
+    }
+}
+
+#[cfg(feature = "sqlite")]
 async fn custody_p2_puzzle_hashes(conn: impl SqliteExecutor<'_>) -> Result<Vec<Bytes32>> {
     query!("SELECT hash FROM p2_puzzles WHERE kind IN (0, 3)")
         .fetch_all(conn)
@@ -185,6 +202,7 @@ async fn custody_p2_puzzle_hashes(conn: impl SqliteExecutor<'_>) -> Result<Vec<B
         .collect()
 }
 
+#[cfg(feature = "sqlite")]
 async fn custody_p2_puzzle_hash(
     conn: impl SqliteExecutor<'_>,
     derivation_index: u32,
@@ -205,6 +223,7 @@ async fn custody_p2_puzzle_hash(
     .convert()
 }
 
+#[cfg(feature = "sqlite")]
 async fn is_custody_p2_puzzle_hash(
     conn: impl SqliteExecutor<'_>,
     puzzle_hash: Bytes32,
@@ -221,6 +240,7 @@ async fn is_custody_p2_puzzle_hash(
         > 0)
 }
 
+#[cfg(feature = "sqlite")]
 async fn is_p2_puzzle_hash(conn: impl SqliteExecutor<'_>, puzzle_hash: Bytes32) -> Result<bool> {
     let puzzle_hash = puzzle_hash.as_ref();
 
@@ -234,21 +254,19 @@ async fn is_p2_puzzle_hash(conn: impl SqliteExecutor<'_>, puzzle_hash: Bytes32) 
         > 0)
 }
 
-async fn derivation_index(conn: impl SqliteExecutor<'_>, is_hardened: bool) -> Result<u32> {
-    query!(
-        "
-        SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index
-        FROM public_keys
-        WHERE is_hardened = ?
-        ",
-        is_hardened
+async fn derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result<u32> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/derivation_index.sql"),
+        vec![is_hardened.into()],
     )
-    .fetch_one(conn)
     .await?
-    .derivation_index
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .i64("derivation_index")?
     .convert()
 }
 
+#[cfg(feature = "sqlite")]
 async fn max_derivation_index(
     conn: impl SqliteExecutor<'_>,
     is_hardened: bool,
@@ -267,6 +285,7 @@ async fn max_derivation_index(
     row.derivation_index.convert()
 }
 
+#[cfg(feature = "sqlite")]
 async fn derivations(
     conn: impl SqliteExecutor<'_>,
     is_hardened: bool,
@@ -311,6 +330,7 @@ async fn derivations(
     Ok((derivations, total_count))
 }
 
+#[cfg(feature = "sqlite")]
 async fn unused_derivation_index(conn: impl SqliteExecutor<'_>, is_hardened: bool) -> Result<u32> {
     query!(
         "
@@ -327,6 +347,7 @@ async fn unused_derivation_index(conn: impl SqliteExecutor<'_>, is_hardened: boo
     .convert()
 }
 
+#[cfg(feature = "sqlite")]
 async fn insert_custody_p2_puzzle(
     conn: impl SqliteExecutor<'_>,
     p2_puzzle_hash: Bytes32,
@@ -356,6 +377,7 @@ async fn insert_custody_p2_puzzle(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn insert_clawback_p2_puzzle(
     conn: impl SqliteExecutor<'_>,
     clawback: ClawbackV2,
@@ -384,6 +406,7 @@ async fn insert_clawback_p2_puzzle(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn insert_option_p2_puzzle(
     conn: impl SqliteExecutor<'_>,
     underlying: OptionUnderlying,
@@ -417,6 +440,7 @@ async fn insert_option_p2_puzzle(
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn insert_arbor_p2_puzzle(conn: impl SqliteExecutor<'_>, key: PublicKey) -> Result<()> {
     let p2_puzzle_hash = P2DelegatedConditionsArgs::new(key)
         .curry_tree_hash()
@@ -441,6 +465,7 @@ async fn insert_arbor_p2_puzzle(conn: impl SqliteExecutor<'_>, key: PublicKey) -
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 async fn p2_puzzle_kind(
     conn: impl SqliteExecutor<'_>,
     p2_puzzle_hash: Bytes32,
@@ -460,6 +485,7 @@ async fn p2_puzzle_kind(
     })
 }
 
+#[cfg(feature = "sqlite")]
 async fn public_key(
     conn: impl SqliteExecutor<'_>,
     p2_puzzle_hash: Bytes32,
@@ -481,6 +507,7 @@ async fn public_key(
     row.map(|row| row.key.convert()).transpose()
 }
 
+#[cfg(feature = "sqlite")]
 async fn clawback(conn: impl SqliteExecutor<'_>, p2_puzzle_hash: Bytes32) -> Result<Clawback> {
     let p2_puzzle_hash = p2_puzzle_hash.as_ref();
 
@@ -510,6 +537,7 @@ async fn clawback(conn: impl SqliteExecutor<'_>, p2_puzzle_hash: Bytes32) -> Res
     })
 }
 
+#[cfg(feature = "sqlite")]
 async fn underlying_launcher_id(
     conn: impl SqliteExecutor<'_>,
     p2_puzzle_hash: Bytes32,
@@ -533,6 +561,7 @@ async fn underlying_launcher_id(
     .convert()
 }
 
+#[cfg(feature = "sqlite")]
 async fn arbor_key(
     conn: impl SqliteExecutor<'_>,
     p2_puzzle_hash: Bytes32,
@@ -554,6 +583,7 @@ async fn arbor_key(
     row.map(|row| row.key.convert()).transpose()
 }
 
+#[cfg(feature = "sqlite")]
 async fn derivation(
     conn: impl SqliteExecutor<'_>,
     public_key: PublicKey,

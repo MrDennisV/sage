@@ -4,7 +4,9 @@ mod executor_sqlx;
 #[cfg(feature = "sqlite")]
 mod maintenance;
 mod serialized_primitives;
+mod migrations;
 #[cfg(feature = "sqlite")]
+mod query_check;
 mod tables;
 mod utils;
 
@@ -14,7 +16,7 @@ pub use executor_sqlx::*;
 #[cfg(feature = "sqlite")]
 pub use maintenance::*;
 pub use serialized_primitives::*;
-#[cfg(feature = "sqlite")]
+pub use migrations::*;
 pub use tables::*;
 
 pub(crate) use utils::*;
@@ -155,6 +157,9 @@ pub enum DatabaseError {
 
     #[error("Public key not found for puzzle hash")]
     PublicKeyNotFound,
+
+    #[error("Query returned no rows")]
+    RowNotFound,
 
     #[error("Column {0} not found in row")]
     ColumnNotFound(String),

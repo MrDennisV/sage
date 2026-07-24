@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index\n        FROM public_keys\n        WHERE is_hardened = ?\n        ",
+  "query": "SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index\nFROM public_keys\nWHERE is_hardened = ?\n",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "640f343dc11301a349c1568532ef1de2004b9e5a9ab555499c6513579fedae49"
+  "hash": "62be928a40df1c1b5bec4a786292c1889497b4b3d9b95e874f618d6c14c3a9c5"
 }

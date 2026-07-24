@@ -1,5 +1,17 @@
 use crate::{Convert, DatabaseError, Result};
 
+/// Includes a query from the `queries/` directory as a `&'static str`.
+///
+/// Queries stored as standalone `.sql` files run through [`SqlExecutor`] on
+/// every target, while the `query_check` module references the same files with
+/// `sqlx::query_file!` so they stay verified against the schema at compile time.
+#[macro_export]
+macro_rules! sql_file {
+    ($path:literal) => {
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/queries/", $path))
+    };
+}
+
 /// A dynamically typed `SQLite` value, used to bind parameters and decode rows
 /// through the [`SqlExecutor`] abstraction.
 #[derive(Debug, Clone, PartialEq)]
