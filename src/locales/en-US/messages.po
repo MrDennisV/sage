@@ -376,11 +376,11 @@ msgstr "Amount includes"
 msgid "Analyze Duration"
 msgstr "Analyze Duration"
 
-#: src/walletconnect/RequestDialog.tsx:526
+#: src/walletconnect/RequestDialog.tsx:567
 msgid "Approve"
 msgstr "Approve"
 
-#: src/walletconnect/RequestDialog.tsx:516
+#: src/walletconnect/RequestDialog.tsx:555
 msgid "Approving"
 msgstr "Approving"
 
@@ -409,8 +409,8 @@ msgid "Ascending"
 msgstr "Ascending"
 
 #: src/walletconnect/RequestDialog.tsx:399
-msgid "Ask you to approve transactions"
-msgstr "Ask you to approve transactions"
+#~ msgid "Ask you to approve transactions"
+#~ msgstr "Ask you to approve transactions"
 
 #: src/components/TokenListView.tsx:18
 msgid "asset"
@@ -1006,6 +1006,10 @@ msgstr "Connect Wallet"
 msgid "Connected to {totalPeersCount} peers"
 msgstr "Connected to {totalPeersCount} peers"
 
+#: src/walletconnect/RequestDialog.tsx:400
+msgid "Connecting as"
+msgstr "Connecting as"
+
 #: src/components/Nav.tsx:192
 msgid "connecting..."
 msgstr "connecting..."
@@ -1184,8 +1188,8 @@ msgid "Currency Symbol"
 msgstr "Currency Symbol"
 
 #: src/walletconnect/RequestDialog.tsx:376
-msgid "Current account"
-msgstr "Current account"
+#~ msgid "Current account"
+#~ msgstr "Current account"
 
 #: src/pages/Settings.tsx:1394
 msgid "Current database statistics and health information"
@@ -2117,9 +2121,13 @@ msgstr "Issue new token"
 msgid "Issue Token"
 msgstr "Issue Token"
 
+#: src/walletconnect/RequestDialog.tsx:416
+msgid "It can't move funds. Every transaction needs approval."
+msgstr "It can't move funds. Every transaction needs approval."
+
 #: src/walletconnect/RequestDialog.tsx:405
-msgid "It cannot move your funds without you approving each transaction."
-msgstr "It cannot move your funds without you approving each transaction."
+#~ msgid "It cannot move your funds without you approving each transaction."
+#~ msgstr "It cannot move your funds without you approving each transaction."
 
 #: src/components/Pagination.tsx:122
 msgid "Items per page"
@@ -2218,7 +2226,7 @@ msgstr "Loading Collection..."
 msgid "Loading NFT details..."
 msgstr "Loading NFT details..."
 
-#: src/walletconnect/RequestDialog.tsx:169
+#: src/walletconnect/RequestDialog.tsx:171
 msgid "Loading offer details..."
 msgstr "Loading offer details..."
 
@@ -3285,6 +3293,10 @@ msgstr "Refresh Info"
 msgid "Refreshing token info..."
 msgstr "Refreshing token info..."
 
+#: src/walletconnect/RequestDialog.tsx:550
+msgid "Reject"
+msgstr "Reject"
+
 #: src/components/WalletCard.tsx:309
 msgid "Remove Emoji"
 msgstr "Remove Emoji"
@@ -3518,8 +3530,8 @@ msgid "Secret Key"
 msgstr "Secret Key"
 
 #: src/walletconnect/RequestDialog.tsx:392
-msgid "See your balance and activity"
-msgstr "See your balance and activity"
+#~ msgid "See your balance and activity"
+#~ msgstr "See your balance and activity"
 
 #: src/pages/PeerList.tsx:66
 msgid "Select all"
@@ -4129,6 +4141,10 @@ msgstr "The number of addresses managed by this wallet"
 msgid "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
 msgstr "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
 
+#: src/walletconnect/RequestDialog.tsx:410
+msgid "The site can see your balance and activity, and ask you to approve transactions."
+msgstr "The site can see your balance and activity, and ask you to approve transactions."
+
 #: src/pages/Addresses.tsx:78
 msgid "The wallet generates a new address after each transaction. Old ones stay valid."
 msgstr "The wallet generates a new address after each transaction. Old ones stay valid."
@@ -4304,9 +4320,13 @@ msgstr "This profile will be permanently deleted by sending it to the burn addre
 msgid "This profile will be transferred to the address below."
 msgstr "This profile will be transferred to the address below."
 
+#: src/walletconnect/RequestDialog.tsx:393
+msgid "This site is not using a secure connection."
+msgstr "This site is not using a secure connection."
+
 #: src/walletconnect/RequestDialog.tsx:384
-msgid "This site will be able to"
-msgstr "This site will be able to"
+#~ msgid "This site will be able to"
+#~ msgstr "This site will be able to"
 
 #: src/pages/Login.tsx:655
 #~ msgid "This wallet requires a database migration to continue. Would you like to delete the wallet's data or cancel the login? The keys will not be affected."

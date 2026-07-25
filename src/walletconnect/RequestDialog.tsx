@@ -34,7 +34,7 @@ import {
 } from '@/walletconnect/commands';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { AlertTriangleIcon, CheckIcon } from 'lucide-react';
+import { AlertTriangleIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from 'theme-o-rama';
 import { formatNumber } from '../i18n';
@@ -50,6 +50,8 @@ export interface RequestDialogProps {
 
 interface CommandDialogProps<T extends WalletConnectCommand> {
   params: Partial<Params<T>>;
+  /** Where the request came from, for the dialogs that present it themselves. */
+  peerName?: string | null;
 }
 
 function SignCoinSpendsDialog({
@@ -359,52 +361,60 @@ export const COMMAND_COMPONENTS: {
 };
 
 /**
- * Shown when a website asks to connect. Unlike every other request, the user
- * has no other context for this one: nothing was pasted, no amount is being
- * confirmed. So it states which wallet the site would see and what it will be
- * able to do.
+ * Shown when a website asks to connect. The address the request came from is
+ * the only thing standing between the user and a lookalike site, so it is set
+ * larger than anything else and in a monospaced face, where the characters
+ * impersonation relies on stay apart.
  */
-function ConnectDialog() {
+function ConnectDialog({ peerName }: { peerName?: string | null }) {
   const { wallet } = useWallet();
   const walletState = useWalletState();
   const address = walletState.sync.receive_address;
 
+  const origin = peerName ?? '';
+  const separator = origin.indexOf('://');
+  const scheme = separator === -1 ? '' : origin.slice(0, separator + 3);
+  const host = separator === -1 ? origin : origin.slice(separator + 3);
+  const insecure = scheme === 'http://';
+
   return (
-    <div className='flex flex-col gap-4'>
-      <div className='rounded-md border p-3'>
-        <div className='text-sm text-muted-foreground'>
-          <Trans>Current account</Trans>
+    <div className='flex flex-col gap-5'>
+      <div className='rounded-md border px-4 py-3'>
+        <div className='font-mono text-lg leading-tight break-all'>
+          <span
+            className={insecure ? 'text-destructive' : 'text-muted-foreground'}
+          >
+            {scheme}
+          </span>
+          <span className='font-medium'>{host}</span>
         </div>
-        <div className='font-medium mt-1'>{wallet?.name}</div>
-        <div className='text-sm text-muted-foreground break-all'>{address}</div>
+        {insecure && (
+          <div className='text-xs text-destructive mt-1.5'>
+            <Trans>This site is not using a secure connection.</Trans>
+          </div>
+        )}
       </div>
 
       <div>
-        <div className='text-sm text-muted-foreground'>
-          <Trans>This site will be able to</Trans>
+        <div className='text-xs uppercase tracking-wide text-muted-foreground'>
+          <Trans>Connecting as</Trans>
         </div>
-        <ul className='mt-2 flex flex-col gap-2'>
-          <li className='flex items-center gap-2'>
-            <CheckIcon
-              className='h-4 w-4 text-emerald-600'
-              aria-hidden='true'
-            />
-            <Trans>See your balance and activity</Trans>
-          </li>
-          <li className='flex items-center gap-2'>
-            <CheckIcon
-              className='h-4 w-4 text-emerald-600'
-              aria-hidden='true'
-            />
-            <Trans>Ask you to approve transactions</Trans>
-          </li>
-        </ul>
+        <div className='font-medium mt-1'>{wallet?.name}</div>
+        <div className='text-sm text-muted-foreground break-all font-mono'>
+          {address}
+        </div>
       </div>
 
-      <div className='text-sm text-muted-foreground'>
-        <Trans>
-          It cannot move your funds without you approving each transaction.
-        </Trans>
+      <div className='border-t pt-4 text-sm'>
+        <p>
+          <Trans>
+            The site can see your balance and activity, and ask you to approve
+            transactions.
+          </Trans>
+        </p>
+        <p className='text-muted-foreground mt-2'>
+          <Trans>It can't move funds. Every transaction needs approval.</Trans>
+        </p>
       </div>
     </div>
   );
@@ -466,6 +476,9 @@ export function RequestDialog({
 
   const CommandComponent = COMMAND_COMPONENTS[method] ?? DefaultCommandDialog;
 
+  // The connect dialog leads with the origin, so the header would repeat it.
+  const ownsPeerName = method === 'chip0002_connect';
+
   const parsedParams = useMemo(
     () => commandInfo.paramsType.parse(params),
     [params, commandInfo],
@@ -490,9 +503,18 @@ export function RequestDialog({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && reject()}>
-      <DialogContent className='max-w-2xl' style={style}>
+      {/* In the extension the request is the only thing on screen, so it takes
+          the whole popup instead of floating in it. */}
+      <DialogContent
+        className={
+          __IS_EXTENSION__
+            ? 'max-w-none w-screen h-screen rounded-none border-0 flex flex-col gap-0'
+            : 'max-w-2xl'
+        }
+        style={style}
+      >
         <DialogHeader>
-          {peerName && (
+          {peerName && !ownsPeerName && (
             <div className='text-sm text-muted-foreground mb-4'>
               From {peerName}
             </div>
@@ -501,19 +523,38 @@ export function RequestDialog({
           <DialogDescription>{metadata.description}</DialogDescription>
         </DialogHeader>
 
-        <div className='max-h-[60vh] overflow-y-auto mb-2'>
-          {CommandComponent && <CommandComponent params={parsedParams ?? {}} />}
+        <div
+          className={
+            __IS_EXTENSION__
+              ? 'flex-1 overflow-y-auto py-4'
+              : 'max-h-[60vh] overflow-y-auto mb-2'
+          }
+        >
+          {CommandComponent && (
+            <CommandComponent params={parsedParams ?? {}} peerName={peerName} />
+          )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter
+          className={
+            __IS_EXTENSION__ ? 'flex-row gap-3 sm:justify-stretch' : ''
+          }
+        >
           <DialogClose asChild>
-            <Button variant='outline' onClick={() => reject()}>
-              Reject
+            <Button
+              variant='outline'
+              size={__IS_EXTENSION__ ? 'lg' : 'default'}
+              className={__IS_EXTENSION__ ? 'flex-1' : ''}
+              onClick={() => reject()}
+            >
+              <Trans>Reject</Trans>
             </Button>
           </DialogClose>
           <LoadingButton
             loading={isApproving}
             loadingText={t`Approving`}
+            size={__IS_EXTENSION__ ? 'lg' : 'default'}
+            className={__IS_EXTENSION__ ? 'flex-1' : ''}
             onClick={async () => {
               setIsApproving(true);
               try {

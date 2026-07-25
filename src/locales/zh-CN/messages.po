@@ -376,11 +376,11 @@ msgstr "金额包括"
 msgid "Analyze Duration"
 msgstr ""
 
-#: src/walletconnect/RequestDialog.tsx:526
+#: src/walletconnect/RequestDialog.tsx:567
 msgid "Approve"
 msgstr ""
 
-#: src/walletconnect/RequestDialog.tsx:516
+#: src/walletconnect/RequestDialog.tsx:555
 msgid "Approving"
 msgstr ""
 
@@ -409,8 +409,8 @@ msgid "Ascending"
 msgstr ""
 
 #: src/walletconnect/RequestDialog.tsx:399
-msgid "Ask you to approve transactions"
-msgstr ""
+#~ msgid "Ask you to approve transactions"
+#~ msgstr ""
 
 #: src/components/TokenListView.tsx:18
 msgid "asset"
@@ -1006,6 +1006,10 @@ msgstr ""
 msgid "Connected to {totalPeersCount} peers"
 msgstr "已连接到 {totalPeersCount} 个节点"
 
+#: src/walletconnect/RequestDialog.tsx:400
+msgid "Connecting as"
+msgstr ""
+
 #: src/components/Nav.tsx:192
 msgid "connecting..."
 msgstr "连接中..."
@@ -1184,8 +1188,8 @@ msgid "Currency Symbol"
 msgstr "货币符号"
 
 #: src/walletconnect/RequestDialog.tsx:376
-msgid "Current account"
-msgstr ""
+#~ msgid "Current account"
+#~ msgstr ""
 
 #: src/pages/Settings.tsx:1394
 msgid "Current database statistics and health information"
@@ -2117,9 +2121,13 @@ msgstr ""
 msgid "Issue Token"
 msgstr "发行代币"
 
-#: src/walletconnect/RequestDialog.tsx:405
-msgid "It cannot move your funds without you approving each transaction."
+#: src/walletconnect/RequestDialog.tsx:416
+msgid "It can't move funds. Every transaction needs approval."
 msgstr ""
+
+#: src/walletconnect/RequestDialog.tsx:405
+#~ msgid "It cannot move your funds without you approving each transaction."
+#~ msgstr ""
 
 #: src/components/Pagination.tsx:122
 msgid "Items per page"
@@ -2218,7 +2226,7 @@ msgstr ""
 msgid "Loading NFT details..."
 msgstr ""
 
-#: src/walletconnect/RequestDialog.tsx:169
+#: src/walletconnect/RequestDialog.tsx:171
 msgid "Loading offer details..."
 msgstr ""
 
@@ -3285,6 +3293,10 @@ msgstr "刷新信息"
 msgid "Refreshing token info..."
 msgstr ""
 
+#: src/walletconnect/RequestDialog.tsx:550
+msgid "Reject"
+msgstr ""
+
 #: src/components/WalletCard.tsx:309
 msgid "Remove Emoji"
 msgstr ""
@@ -3518,8 +3530,8 @@ msgid "Secret Key"
 msgstr "私钥"
 
 #: src/walletconnect/RequestDialog.tsx:392
-msgid "See your balance and activity"
-msgstr ""
+#~ msgid "See your balance and activity"
+#~ msgstr ""
 
 #: src/pages/PeerList.tsx:66
 msgid "Select all"
@@ -4129,6 +4141,10 @@ msgstr ""
 msgid "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
 msgstr ""
 
+#: src/walletconnect/RequestDialog.tsx:410
+msgid "The site can see your balance and activity, and ask you to approve transactions."
+msgstr ""
+
 #: src/pages/Addresses.tsx:78
 msgid "The wallet generates a new address after each transaction. Old ones stay valid."
 msgstr "钱包在每次交易后会生成一个新的地址, 旧地址仍然有效."
@@ -4303,9 +4319,13 @@ msgstr ""
 msgid "This profile will be transferred to the address below."
 msgstr ""
 
-#: src/walletconnect/RequestDialog.tsx:384
-msgid "This site will be able to"
+#: src/walletconnect/RequestDialog.tsx:393
+msgid "This site is not using a secure connection."
 msgstr ""
+
+#: src/walletconnect/RequestDialog.tsx:384
+#~ msgid "This site will be able to"
+#~ msgstr ""
 
 #: src/pages/Login.tsx:655
 #~ msgid "This wallet requires a database migration to continue. Would you like to delete the wallet's data or cancel the login? The keys will not be affected."
