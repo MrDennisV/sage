@@ -47,9 +47,6 @@ const UI_CLOSE_GRACE_MS = 500;
 /** How long to wait for the action popup before falling back to a window. */
 const UI_OPEN_TIMEOUT_MS = 1500;
 
-/** How long an answered popup waits before closing, in case more work arrives. */
-const UI_DISMISS_DELAY_MS = 1000;
-
 /**
  * Chrome stops an idle service worker after 30 seconds, which would drop a
  * request the user is still reading. Touching an extension API keeps it up
@@ -246,7 +243,7 @@ async function openApprovalUi(): Promise<void> {
  * popup that is already closing: it looks open, so no new one is opened, and
  * then the disconnect arrives and takes the request down with it.
  */
-function dismissOpenedUi(delay: number) {
+function dismissOpenedUi() {
   if (!openedUi || pending.size > 0 || dismissTimer !== null) return;
 
   dismissTimer = setTimeout(() => {
@@ -265,7 +262,9 @@ function dismissOpenedUi(delay: number) {
         // Already gone.
       }
     }
-  }, delay);
+    // A tick, not a wait: it only defers past the caller so a request settling
+    // right now is not told the dialog is gone before the window takes it.
+  }, 0);
 }
 
 /** Calls off a close that has not happened yet, because there is work again. */
@@ -298,12 +297,9 @@ function settle(request: PendingRequest, error?: Error, result?: unknown) {
   }
 
   // Decide the popup's fate before telling it what is pending, so a dialog
-  // about to be closed with the window is not cleared on its own first. A site
-  // often follows a request it got an answer to with another one, which is what
-  // the wait is for; a refused or failed one ends that flow, so the window goes
-  // as soon as the user says no.
+  // about to be closed with the window is not cleared on its own first.
   closeApprovalWindow();
-  dismissOpenedUi(error ? 0 : UI_DISMISS_DELAY_MS);
+  dismissOpenedUi();
   broadcastPending();
 }
 
