@@ -51,7 +51,16 @@ try {
   let worker = context.serviceWorkers()[0];
   worker ??= await context.waitForEvent('serviceworker', { timeout: 20000 });
   worker.on('console', (m) => {
-    if (m.type() === 'error') failures.push(`[worker] ${m.text()}`);
+    if (m.type() !== 'error') return;
+
+    // A wallet that just became active has no derivations until its first sync
+    // pass, and the sync status asks for the change address, which needs one.
+    // The interface polls it either way, so this shows up for a second or two
+    // after switching. Upstream has the same race; it is narrower there because
+    // the sync manager is already running.
+    if (m.text().includes('Insufficient derivations')) return;
+
+    failures.push(`[worker] ${m.text()}`);
   });
 
   const id = new URL(worker.url()).host;
@@ -337,6 +346,21 @@ try {
       timeout: 15000,
     })
     .catch(() => {});
+
+  // The wallet it switched to has to become usable, not just active: the change
+  // address the sync status reports needs a derivation behind it.
+  let usable = null;
+
+  for (let attempt = 0; attempt < 20 && !usable?.data; attempt++) {
+    await wallet.waitForTimeout(1000);
+    usable = await send('get_sync_status', {});
+  }
+
+  check(
+    'the wallet it switched to becomes usable',
+    /^(xch|txch)1[a-z0-9]+$/.test(usable?.data?.receive_address ?? ''),
+    JSON.stringify(usable).slice(0, 160),
+  );
 
   check(
     'accountChanged reached the page',

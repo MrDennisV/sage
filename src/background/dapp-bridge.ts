@@ -47,7 +47,7 @@ const UI_CLOSE_GRACE_MS = 500;
 /** How long to wait for the action popup before falling back to a window. */
 const UI_OPEN_TIMEOUT_MS = 1500;
 
-/** How long a settled popup waits before closing, in case more work arrives. */
+/** How long an answered popup waits before closing, in case more work arrives. */
 const UI_DISMISS_DELAY_MS = 1000;
 
 /**
@@ -246,7 +246,7 @@ async function openApprovalUi(): Promise<void> {
  * popup that is already closing: it looks open, so no new one is opened, and
  * then the disconnect arrives and takes the request down with it.
  */
-function dismissOpenedUi() {
+function dismissOpenedUi(delay: number) {
   if (!openedUi || pending.size > 0 || dismissTimer !== null) return;
 
   dismissTimer = setTimeout(() => {
@@ -265,7 +265,7 @@ function dismissOpenedUi() {
         // Already gone.
       }
     }
-  }, UI_DISMISS_DELAY_MS);
+  }, delay);
 }
 
 /** Calls off a close that has not happened yet, because there is work again. */
@@ -298,9 +298,12 @@ function settle(request: PendingRequest, error?: Error, result?: unknown) {
   }
 
   // Decide the popup's fate before telling it what is pending, so a dialog
-  // about to be closed with the window is not cleared on its own first.
+  // about to be closed with the window is not cleared on its own first. A site
+  // often follows a request it got an answer to with another one, which is what
+  // the wait is for; a refused or failed one ends that flow, so the window goes
+  // as soon as the user says no.
   closeApprovalWindow();
-  dismissOpenedUi();
+  dismissOpenedUi(error ? 0 : UI_DISMISS_DELAY_MS);
   broadcastPending();
 }
 
