@@ -47,6 +47,9 @@ const UI_CLOSE_GRACE_MS = 500;
 /** How long to wait for the action popup before falling back to a window. */
 const UI_OPEN_TIMEOUT_MS = 1500;
 
+/** How long a settled popup waits before closing, in case more work arrives. */
+const UI_DISMISS_DELAY_MS = 1000;
+
 /**
  * Chrome stops an idle service worker after 30 seconds, which would drop a
  * request the user is still reading. Touching an extension API keeps it up
@@ -67,6 +70,7 @@ interface PendingRequest {
 const pending = new Map<string, PendingRequest>();
 const uiPorts = new Set<chrome.runtime.Port>();
 const uiWaiters = new Set<() => void>();
+const closeWaiters = new Set<() => void>();
 
 let nextRequestId = 0;
 let approvalWindowId: number | null = null;
@@ -74,6 +78,11 @@ let approvalWindowId: number | null = null;
 // Whether the bridge is the reason a wallet window is on screen. A popup the
 // user opened themselves is theirs to close.
 let openedUi = false;
+
+// A close the bridge asked for, still in flight. The disconnect it produces is
+// not the user walking away, so it must not take pending requests down with it.
+let dismissTimer: ReturnType<typeof setTimeout> | null = null;
+let dismissing = false;
 let keepalive: ReturnType<typeof setInterval> | null = null;
 let runtime: WalletRuntime;
 
@@ -168,12 +177,36 @@ function waitForUi(): Promise<boolean> {
   });
 }
 
+/** Waits for a close already under way, so the next popup starts from nothing. */
+function waitForUiToClose(): Promise<void> {
+  if (!dismissing || uiPorts.size === 0) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      closeWaiters.delete(notify);
+      resolve();
+    }, UI_CLOSE_GRACE_MS);
+
+    const notify = () => {
+      clearTimeout(timer);
+      closeWaiters.delete(notify);
+      resolve();
+    };
+
+    closeWaiters.add(notify);
+  });
+}
+
 /**
  * Brings up Sage's own popup. `chrome.action.openPopup` reuses the toolbar
  * popup where the browser allows it; otherwise the same page is opened as a
  * window. Never a bespoke approval page.
  */
 async function openApprovalUi(): Promise<void> {
+  // A popup we already told to close is not one to hand a new request to, so
+  // wait for it to go before opening a fresh one.
+  if (dismissing) await waitForUiToClose();
+
   if (uiPorts.size > 0) return;
 
   openedUi = true;
@@ -199,19 +232,42 @@ async function openApprovalUi(): Promise<void> {
   approvalWindowId = created?.id ?? null;
 }
 
-/** Closes the popup the bridge opened, once nothing is left to answer. */
+/**
+ * Closes the popup the bridge opened, once nothing is left to answer.
+ *
+ * A site commonly follows one request straight with another — sign, then send
+ * — so the close waits a moment first. Without that, the second request finds a
+ * popup that is already closing: it looks open, so no new one is opened, and
+ * then the disconnect arrives and takes the request down with it.
+ */
 function dismissOpenedUi() {
-  if (!openedUi || pending.size > 0) return;
+  if (!openedUi || pending.size > 0 || dismissTimer !== null) return;
 
-  openedUi = false;
+  dismissTimer = setTimeout(() => {
+    dismissTimer = null;
 
-  for (const port of uiPorts) {
-    try {
-      port.postMessage({ type: 'DAPP_CLOSE' });
-    } catch {
-      // Already gone.
+    // Something arrived while we waited, and it needs this popup.
+    if (pending.size > 0) return;
+
+    openedUi = false;
+    dismissing = true;
+
+    for (const port of uiPorts) {
+      try {
+        port.postMessage({ type: 'DAPP_CLOSE' });
+      } catch {
+        // Already gone.
+      }
     }
-  }
+  }, UI_DISMISS_DELAY_MS);
+}
+
+/** Calls off a close that has not happened yet, because there is work again. */
+function keepUiOpen() {
+  if (dismissTimer === null) return;
+
+  clearTimeout(dismissTimer);
+  dismissTimer = null;
 }
 
 function closeApprovalWindow() {
@@ -265,6 +321,7 @@ async function requestApproval(
     pending.set(id, { id, method, params, origin, resolve, reject, timeout });
   });
 
+  keepUiOpen();
   updateKeepalive();
   broadcastPending();
 
@@ -511,6 +568,22 @@ export function installDappBridge(walletRuntime: WalletRuntime): void {
 
     port.onDisconnect.addListener(() => {
       uiPorts.delete(port);
+
+      // We asked for this one. Anything pending arrived after the close was
+      // already on its way, so it gets a popup of its own instead of an error.
+      if (dismissing && uiPorts.size === 0) {
+        dismissing = false;
+
+        for (const notify of [...closeWaiters]) notify();
+
+        if (pending.size > 0) {
+          openApprovalUi().catch(() => {
+            // The reopen failed; the timeout is what gives up on the request.
+          });
+        }
+
+        return;
+      }
 
       setTimeout(() => {
         if (uiPorts.size === 0) {

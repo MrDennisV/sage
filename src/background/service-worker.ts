@@ -129,6 +129,10 @@ function boot(): Promise<void> {
     });
     await sage_init('');
     await useSessionDatabase();
+
+    // The worker restarts far more often than the wallet changes, so record
+    // what is active up front rather than announcing it as news.
+    announcedFingerprint = session().fingerprint;
   })();
 
   return booted;
@@ -176,6 +180,24 @@ async function dispatch(cmd: string, request: unknown): Promise<unknown> {
 async function flushAll(): Promise<void> {
   await flushKv();
   await flushDb();
+}
+
+// Opening the wallet boots its interface, which logs into whatever wallet is
+// already active. That is not a change, and telling a connected site otherwise
+// makes it drop the session it is in the middle of using — which is what
+// approving a request would do, since answering one opens the wallet.
+let announcedFingerprint: number | null = null;
+
+function announceAccount() {
+  const { fingerprint } = session();
+
+  if (fingerprint === announcedFingerprint) return;
+
+  announcedFingerprint = fingerprint;
+
+  broadcastEvent('accountChanged').catch(() => {
+    // Websites that missed the event will read the new wallet anyway.
+  });
 }
 
 function broadcastSyncEvent(data: unknown) {
@@ -302,9 +324,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
 
       if (ACCOUNT_COMMANDS.has(cmd)) {
-        broadcastEvent('accountChanged').catch(() => {
-          // Websites that missed the event will read the new wallet anyway.
-        });
+        announceAccount();
       }
 
       if (NETWORK_COMMANDS.has(cmd)) {

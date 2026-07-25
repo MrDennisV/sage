@@ -254,6 +254,30 @@ try {
     JSON.stringify(refusal),
   );
 
+  // ─── Two requests in a row both get answered ─────────────────────
+  // A site commonly follows one request straight with another. The popup is
+  // dismissed once a request settles, so the second one used to arrive while
+  // that close was still in flight: it saw a popup that looked open, no new one
+  // was opened, and the disconnect then took it down as if the user had walked
+  // away.
+  for (const attempt of ['first', 'second']) {
+    const signing = call(page, 'signMessage', {
+      message: `Back to back, ${attempt}`,
+      publicKey: keys.result[0],
+    });
+
+    await wallet.getByRole('dialog').waitFor({ timeout: 20000 });
+    await wallet.getByRole('button', { name: 'Approve' }).click();
+
+    const result = await signing;
+
+    check(
+      `back to back request (${attempt}) is answered`,
+      result.ok && /^[0-9a-f]{192}$/i.test(result.result ?? ''),
+      JSON.stringify(result).slice(0, 160),
+    );
+  }
+
   // ─── sendTransaction reaches the chain ───────────────────────────
   // A bundle with no spends is well formed and certain to be refused, so what
   // it proves is that the wallet carried it to the node and brought the answer
@@ -283,7 +307,31 @@ try {
   );
 
   // ─── A wallet change reaches the page as accountChanged ─────────
+  // Signing back into the wallet that is already active is not a change, and
+  // saying otherwise makes a site drop the session it is using — which happens
+  // constantly, since answering any request opens the wallet and boots it.
   await send('login', { fingerprint: imported.fingerprint });
+  await page.waitForTimeout(2000);
+
+  check(
+    'signing into the active wallet again says nothing',
+    !(await page.evaluate(() => window.sageTestEvents ?? [])).includes(
+      'accountChanged',
+    ),
+    JSON.stringify(await page.evaluate(() => window.sageTestEvents ?? [])),
+  );
+
+  const { data: second } = await send('generate_mnemonic', {
+    use_24_words: true,
+  });
+  const { data: other } = await send('import_key', {
+    name: 'Dapp Second',
+    key: second.mnemonic,
+    save_secrets: true,
+    login: true,
+  });
+  await send('login', { fingerprint: other.fingerprint });
+
   await page
     .waitForFunction(() => window.sageTestEvents?.includes('accountChanged'), {
       timeout: 15000,
