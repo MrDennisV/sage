@@ -376,11 +376,11 @@ msgstr "Cantidad incluye"
 msgid "Analyze Duration"
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:803
+#: src/walletconnect/RequestDialog.tsx:526
 msgid "Approve"
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:793
+#: src/walletconnect/RequestDialog.tsx:516
 msgid "Approving"
 msgstr ""
 
@@ -406,6 +406,10 @@ msgstr "¿Está seguro de que desea sincronizar de nuevo los datos de esta bille
 
 #: src/components/OptionOptions.tsx:179
 msgid "Ascending"
+msgstr ""
+
+#: src/walletconnect/RequestDialog.tsx:399
+msgid "Ask you to approve transactions"
 msgstr ""
 
 #: src/components/TokenListView.tsx:18
@@ -1178,6 +1182,10 @@ msgstr ""
 #: src/pages/IssueToken.tsx:94
 msgid "Currency Symbol"
 msgstr "Símbolo de moneda"
+
+#: src/walletconnect/RequestDialog.tsx:376
+msgid "Current account"
+msgstr ""
 
 #: src/pages/Settings.tsx:1394
 msgid "Current database statistics and health information"
@@ -2109,6 +2117,10 @@ msgstr "Emisión de nuevo token"
 msgid "Issue Token"
 msgstr "Emisión de Token"
 
+#: src/walletconnect/RequestDialog.tsx:405
+msgid "It cannot move your funds without you approving each transaction."
+msgstr ""
+
 #: src/components/Pagination.tsx:122
 msgid "Items per page"
 msgstr "Elementos por página"
@@ -2206,7 +2218,7 @@ msgstr "Cargando Colección..."
 msgid "Loading NFT details..."
 msgstr ""
 
-#: src/contexts/WalletConnectContext.tsx:497
+#: src/walletconnect/RequestDialog.tsx:169
 msgid "Loading offer details..."
 msgstr ""
 
@@ -3505,6 +3517,10 @@ msgstr "Navegación secundaria"
 msgid "Secret Key"
 msgstr "Clave secreta"
 
+#: src/walletconnect/RequestDialog.tsx:392
+msgid "See your balance and activity"
+msgstr ""
+
 #: src/pages/PeerList.tsx:66
 msgid "Select all"
 msgstr ""
@@ -4287,6 +4303,10 @@ msgstr "Este perfil será eliminado de forma permanente al enviarlo a la direcci
 #: src/components/confirmations/DidConfirmation.tsx:45
 msgid "This profile will be transferred to the address below."
 msgstr "Este perfil será transferido a la dirección a continuación."
+
+#: src/walletconnect/RequestDialog.tsx:384
+msgid "This site will be able to"
+msgstr ""
 
 #: src/pages/Login.tsx:655
 #~ msgid "This wallet requires a database migration to continue. Would you like to delete the wallet's data or cancel the login? The keys will not be affected."

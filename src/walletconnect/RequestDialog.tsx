@@ -25,6 +25,7 @@ import { LoadingButton } from '@/components/ui/loading-button';
 import { Switch } from '@/components/ui/switch';
 import { useErrors } from '@/hooks/useErrors';
 import { decodeHexMessage, fromMojos, isHex } from '@/lib/utils';
+import { useWallet } from '@/contexts/WalletContext';
 import { useWalletState } from '@/state';
 import {
   Params,
@@ -33,7 +34,7 @@ import {
 } from '@/walletconnect/commands';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
-import { AlertTriangleIcon } from 'lucide-react';
+import { AlertTriangleIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from 'theme-o-rama';
 import { formatNumber } from '../i18n';
@@ -347,6 +348,7 @@ function DefaultCommandDialog({ params }: { params: unknown }) {
 export const COMMAND_COMPONENTS: {
   [K in WalletConnectCommand]?: (props: CommandDialogProps<K>) => JSX.Element;
 } = {
+  chip0002_connect: ConnectDialog,
   chip0002_signCoinSpends: SignCoinSpendsDialog,
   chip0002_signMessage: SignMessageDialog,
   chia_takeOffer: TakeOfferDialog,
@@ -355,6 +357,58 @@ export const COMMAND_COMPONENTS: {
   chia_send: SendDialog,
   chia_signMessageByAddress: SignMessageByAddressDialog,
 };
+
+/**
+ * Shown when a website asks to connect. Unlike every other request, the user
+ * has no other context for this one: nothing was pasted, no amount is being
+ * confirmed. So it states which wallet the site would see and what it will be
+ * able to do.
+ */
+function ConnectDialog() {
+  const { wallet } = useWallet();
+  const walletState = useWalletState();
+  const address = walletState.sync.receive_address;
+
+  return (
+    <div className='flex flex-col gap-4'>
+      <div className='rounded-md border p-3'>
+        <div className='text-sm text-muted-foreground'>
+          <Trans>Current account</Trans>
+        </div>
+        <div className='font-medium mt-1'>{wallet?.name}</div>
+        <div className='text-sm text-muted-foreground break-all'>{address}</div>
+      </div>
+
+      <div>
+        <div className='text-sm text-muted-foreground'>
+          <Trans>This site will be able to</Trans>
+        </div>
+        <ul className='mt-2 flex flex-col gap-2'>
+          <li className='flex items-center gap-2'>
+            <CheckIcon
+              className='h-4 w-4 text-emerald-600'
+              aria-hidden='true'
+            />
+            <Trans>See your balance and activity</Trans>
+          </li>
+          <li className='flex items-center gap-2'>
+            <CheckIcon
+              className='h-4 w-4 text-emerald-600'
+              aria-hidden='true'
+            />
+            <Trans>Ask you to approve transactions</Trans>
+          </li>
+        </ul>
+      </div>
+
+      <div className='text-sm text-muted-foreground'>
+        <Trans>
+          It cannot move your funds without you approving each transaction.
+        </Trans>
+      </div>
+    </div>
+  );
+}
 
 export const COMMAND_METADATA: Partial<
   Record<
@@ -365,6 +419,10 @@ export const COMMAND_METADATA: Partial<
     }
   >
 > = {
+  chip0002_connect: {
+    title: 'Connect Site',
+    description: 'Would you like to let this site connect to your wallet?',
+  },
   chip0002_signCoinSpends: {
     title: 'Sign Transaction',
     description: 'Review and approve the transaction details below',
