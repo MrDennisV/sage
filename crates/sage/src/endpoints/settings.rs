@@ -5,7 +5,8 @@ use std::time::Duration;
 use itertools::Itertools;
 use sage_api::{
     GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse, NetworkKind, SetDeltaSync,
-    SetDeltaSyncOverride, SetDeltaSyncOverrideResponse, SetDeltaSyncResponse,
+    SetDeltaSyncOverride, SetDeltaSyncOverrideResponse, SetDeltaSyncResponse, SetNetworkApiUrl,
+    SetNetworkApiUrlResponse,
 };
 #[cfg(feature = "native")]
 use sage_api::{
@@ -24,6 +25,21 @@ use crate::{Error, Result, Sage};
 impl<E: SqlExecutor> Sage<E> {
     pub fn get_networks(&mut self, _req: GetNetworks) -> Result<GetNetworksResponse> {
         Ok(self.network_list.clone())
+    }
+
+    pub fn set_network_api_url(&mut self, req: SetNetworkApiUrl) -> Result<SetNetworkApiUrlResponse> {
+        let network = self
+            .network_list
+            .networks
+            .iter_mut()
+            .find(|network| network.name == req.name)
+            .ok_or(Error::UnknownNetwork)?;
+
+        network.api_url = req.api_url.filter(|url| !url.trim().is_empty());
+
+        self.save_config()?;
+
+        Ok(SetNetworkApiUrlResponse {})
     }
 
     pub fn get_network(&mut self, _req: GetNetwork) -> Result<GetNetworkResponse> {

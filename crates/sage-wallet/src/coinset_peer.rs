@@ -27,16 +27,9 @@ impl CoinsetPeer {
         Self::new(CoinsetClient::testnet11())
     }
 
-    /// Builds a client for a network id. Coinset hosts networks other than
-    /// mainnet as subdomains, following the testnet11 convention.
-    pub fn for_network(network_id: &str) -> Self {
-        match network_id {
-            "mainnet" => Self::mainnet(),
-            "testnet11" => Self::testnet11(),
-            _ => Self::new(CoinsetClient::new(format!(
-                "https://{network_id}.api.coinset.org"
-            ))),
-        }
+    /// Builds a client for an API base URL.
+    pub fn for_api_url(api_url: String) -> Self {
+        Self::new(CoinsetClient::new(api_url))
     }
 
     /// Returns the current peak height and header hash.
@@ -61,11 +54,13 @@ fn coinset_error<E: std::error::Error>(request: &str) -> impl Fn(E) -> WalletErr
     move |error| {
         // The client reports transport failures without naming the request or
         // the underlying cause, so include both.
+        use std::fmt::Write;
+
         let mut message = format!("{request}: {error}");
         let mut source = error.source();
 
         while let Some(cause) = source {
-            message.push_str(&format!(" -> {cause}"));
+            let _ = write!(message, " -> {cause}");
             source = cause.source();
         }
 

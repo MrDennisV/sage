@@ -71,7 +71,8 @@ async fn handle(
             create_transaction, sign_coin_spends, view_coin_spends, submit_transaction, make_offer,
             take_offer, combine_offers, view_offer, import_offer, get_offers, get_offers_for_asset,
             get_offer, delete_offer, cancel_offer, cancel_offers, get_networks, get_network,
-            set_delta_sync, set_delta_sync_override, update_cat, update_did, update_option,
+            set_delta_sync, set_delta_sync_override, set_network_api_url, update_cat, update_did,
+            update_option,
             update_nft, update_nft_collection, redownload_nft, increase_derivation_index
         )
         Ok(match command {

@@ -545,6 +545,15 @@ function WalletConnectSettings() {
   );
 }
 
+/** Mirrors the fallback the wallet uses when a network has no API URL set. */
+function defaultApiUrl(network: Network) {
+  const networkId = network.network_id ?? network.name;
+
+  return networkId === 'mainnet'
+    ? 'https://api.coinset.org'
+    : `https://${networkId}.api.coinset.org`;
+}
+
 function NetworkSettings() {
   const { addError } = useErrors();
 
@@ -560,6 +569,7 @@ function NetworkSettings() {
     targetPeers === null || !isValidU32(targetPeers, 1);
 
   const [config, setConfig] = useState<NetworkConfig | null>(null);
+  const [apiUrls, setApiUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     commands.networkConfig().then(setConfig).catch(addError);
@@ -610,6 +620,42 @@ function NetworkSettings() {
           </Select>
         }
       />
+
+      {__IS_EXTENSION__ &&
+        networks.map((entry) => (
+          <SettingItem
+            key={entry.name}
+            label={t`${entry.name} API`}
+            description={t`Endpoint used to reach the ${entry.name} blockchain`}
+            control={
+              <Input
+                className='w-[260px]'
+                placeholder={defaultApiUrl(entry)}
+                value={apiUrls[entry.name] ?? entry.api_url ?? ''}
+                onChange={(event) =>
+                  setApiUrls((urls) => ({
+                    ...urls,
+                    [entry.name]: event.target.value,
+                  }))
+                }
+                onBlur={(event) => {
+                  const api_url = event.target.value.trim() || null;
+
+                  if (api_url === (entry.api_url ?? null)) return;
+
+                  commands
+                    .setNetworkApiUrl({ name: entry.name, api_url })
+                    .then(() =>
+                      commands
+                        .getNetworks({})
+                        .then((data) => setNetworks(data.networks)),
+                    )
+                    .catch(addError);
+                }}
+              />
+            }
+          />
+        ))}
 
       {!__IS_EXTENSION__ && (
         <>

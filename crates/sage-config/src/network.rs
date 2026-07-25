@@ -76,6 +76,10 @@ pub struct Network {
     pub additional_peer_introducers: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inherit: Option<InheritedNetwork>,
+    /// Base URL of the Chia RPC API used where the peer protocol isn't
+    /// available, such as the browser extension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_url: Option<String>,
 }
 
 impl Network {
@@ -83,6 +87,20 @@ impl Network {
         self.prefix
             .clone()
             .unwrap_or_else(|| self.ticker.to_lowercase())
+    }
+
+    /// The API base URL, falling back to the Coinset instance for this
+    /// network. Coinset hosts networks other than mainnet as subdomains.
+    pub fn api_url(&self) -> String {
+        self.api_url.clone().unwrap_or_else(|| {
+            let network_id = self.network_id();
+
+            if network_id == "mainnet" {
+                "https://api.coinset.org".to_string()
+            } else {
+                format!("https://{network_id}.api.coinset.org")
+            }
+        })
     }
 
     pub fn network_id(&self) -> String {
@@ -176,6 +194,7 @@ pub static MAINNET: LazyLock<Network> = LazyLock::new(|| Network {
     ],
     additional_peer_introducers: vec!["introducer.chia.net".to_string()],
     inherit: Some(InheritedNetwork::Mainnet),
+    api_url: None,
 });
 
 pub static TESTNET11: LazyLock<Network> = LazyLock::new(|| Network {
@@ -190,4 +209,5 @@ pub static TESTNET11: LazyLock<Network> = LazyLock::new(|| Network {
     additional_dns_introducers: vec!["dns-introducer-testnet11.chia.net".to_string()],
     additional_peer_introducers: vec!["introducer-testnet11.chia.net".to_string()],
     inherit: Some(InheritedNetwork::Testnet11),
+    api_url: None,
 });

@@ -102,7 +102,7 @@ cfg_if::cfg_if! {
             /// The Coinset API client for the active network. It is a stateless
             /// HTTP client, so it is built on demand instead of pooled.
             pub fn peer(&self) -> CoinsetPeer {
-                CoinsetPeer::for_network(&self.network_id())
+                CoinsetPeer::for_api_url(self.network().api_url())
             }
 
             pub(crate) fn acquire_peer(&self) -> impl Future<Output = Option<CoinsetPeer>> {

@@ -205,6 +205,7 @@ export type {
   SetDeltaSyncOverride,
   SetDiscoverPeers,
   SetNetwork,
+  SetNetworkApiUrl,
   SetNetworkOverride,
   SetTargetPeers,
   SetWalletEmoji,
@@ -518,6 +519,9 @@ export const commands = {
   },
   async setNetworkOverride(req: any) {
     return invoke('set_network_override', { req });
+  },
+  async setNetworkApiUrl(req: any) {
+    return invoke('set_network_api_url', { req });
   },
   async walletConfig(fingerprint: number) {
     return invoke('wallet_config', { fingerprint });

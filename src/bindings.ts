@@ -248,6 +248,9 @@ async setNetwork(req: SetNetwork) : Promise<EmptyResponse> {
 async setNetworkOverride(req: SetNetworkOverride) : Promise<EmptyResponse> {
     return await TAURI_INVOKE("set_network_override", { req });
 },
+async setNetworkApiUrl(req: SetNetworkApiUrl) : Promise<EmptyResponse> {
+    return await TAURI_INVOKE("set_network_api_url", { req });
+},
 async walletConfig(fingerprint: number) : Promise<Wallet | null> {
     return await TAURI_INVOKE("wallet_config", { fingerprint });
 },
@@ -1902,7 +1905,7 @@ summary: TransactionSummary;
  * Coin spends in the transaction
  */
 coin_spends: CoinSpendJson[] }
-export type Network = { name: string; ticker: string; prefix?: string | null; precision: number; network_id?: string | null; default_port: number; genesis_challenge: string; agg_sig_me?: string | null; dns_introducers: string[]; peer_introducers: string[]; inherit?: InheritedNetwork | null }
+export type Network = { name: string; ticker: string; prefix?: string | null; precision: number; network_id?: string | null; default_port: number; genesis_challenge: string; agg_sig_me?: string | null; dns_introducers: string[]; peer_introducers: string[]; inherit?: InheritedNetwork | null; api_url?: string | null }
 export type NetworkConfig = { default_network: string; target_peers: number; discover_peers: boolean }
 export type NetworkKind = "mainnet" | "testnet" | "unknown"
 export type NetworkList = { networks: Network[] }
@@ -2321,11 +2324,20 @@ name: string }
 /**
  * Override network settings for a specific wallet
  */
-export type SetNetworkOverride = { 
+export type SetNetworkApiUrl = {
+/**
+ * Network name to configure
+ */
+name: string;
+/**
+ * API base URL (null to restore the default)
+ */
+api_url: string | null }
+export type SetNetworkOverride = {
 /**
  * Wallet fingerprint to override network for
  */
-fingerprint: number; 
+fingerprint: number;
 /**
  * Network name (null to reset to default)
  */

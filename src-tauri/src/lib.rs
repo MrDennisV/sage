@@ -104,6 +104,7 @@ pub fn run() {
             commands::set_target_peers,
             commands::set_network,
             commands::set_network_override,
+            commands::set_network_api_url,
             commands::wallet_config,
             commands::default_wallet_config,
             commands::get_networks,
