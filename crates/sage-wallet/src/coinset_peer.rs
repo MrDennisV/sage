@@ -3,8 +3,17 @@ use std::collections::HashSet;
 use crate::prelude::*;
 use chia_protocol::{CoinStateFilters, RespondPuzzleState, TransactionAck};
 use chia_sdk_coinset::{ChiaRpcClient, CoinRecord, CoinsetClient};
+use serde::Deserialize;
 
 use crate::{PeerApi, WalletError};
+
+/// What the API answers a `push_tx` with. The client ships a type for this, but
+/// it requires a `status` field that a rejection does not carry.
+#[derive(Debug, Deserialize)]
+struct PushTxResponse {
+    success: bool,
+    error: Option<String>,
+}
 
 /// A [`PeerApi`] implementation backed by the public Coinset HTTP API, used
 /// where the native peer protocol isn't available (such as browsers). There
@@ -288,9 +297,17 @@ impl PeerApi for CoinsetPeer {
     ) -> Result<TransactionAck, WalletError> {
         let transaction_id = spend_bundle.name();
 
-        let response = self
+        // The API drops `status` from a rejection, which the client's own
+        // response type requires, so reading it that way turns every refused
+        // transaction into a decoding error instead of the reason it was
+        // refused. Only `success` and `error` are relied on here, and both are
+        // always present.
+        let response: PushTxResponse = self
             .client
-            .push_tx(spend_bundle)
+            .make_post_request(
+                "push_tx",
+                serde_json::json!({ "spend_bundle": spend_bundle }),
+            )
             .await
             .map_err(coinset_error("push_tx"))?;
 
