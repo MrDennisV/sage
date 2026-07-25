@@ -2,6 +2,7 @@
 
 mod endpoints;
 mod error;
+mod offer_code;
 #[cfg(feature = "native")]
 mod peers;
 mod sage;
@@ -12,6 +13,7 @@ mod store;
 mod utils;
 
 pub use error::*;
+pub use offer_code::*;
 pub use sage::*;
 pub use store::*;
 

@@ -2,16 +2,12 @@ use chia_bls::master_to_wallet_hardened_intermediate;
 use chia_puzzle_types::{DeriveSynthetic, nft::NftMetadata, standard::StandardArgs};
 use sage_api::{
     IncreaseDerivationIndex, IncreaseDerivationIndexResponse, RedownloadNft, RedownloadNftResponse,
-    UpdateCat, UpdateCatResponse, UpdateDid, UpdateDidResponse, UpdateNft, UpdateNftCollection,
-    UpdateNftCollectionResponse, UpdateNftResponse, UpdateOption, UpdateOptionResponse,
+    ResyncCat, ResyncCatResponse, UpdateCat, UpdateCatResponse, UpdateDid, UpdateDidResponse,
+    UpdateNft, UpdateNftCollection, UpdateNftCollectionResponse, UpdateNftResponse, UpdateOption,
+    UpdateOptionResponse,
 };
-#[cfg(feature = "native")]
-use sage_api::{ResyncCat, ResyncCatResponse};
-#[cfg(feature = "native")]
 use sage_assets::DexieCat;
-#[cfg(feature = "native")]
-use sage_database::{Asset, AssetKind};
-use sage_database::{Derivation, SqlExecutor};
+use sage_database::{Asset, AssetKind, Derivation, SqlExecutor};
 use sage_wallet::prelude::*;
 
 use crate::{
@@ -224,8 +220,6 @@ impl<E: SqlExecutor> Sage<E> {
     }
 }
 
-// Token metadata is fetched from Dexie, which needs a native HTTP client.
-#[cfg(feature = "native")]
 impl<E: SqlExecutor> Sage<E> {
     pub async fn resync_cat(&self, req: ResyncCat) -> Result<ResyncCatResponse> {
         let wallet = self.wallet()?;

@@ -1,4 +1,4 @@
-use chia_wallet_sdk::prelude::*;
+use chia_protocol::Bytes32;
 use serde::Deserialize;
 
 use crate::UriError;

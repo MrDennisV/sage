@@ -14,7 +14,6 @@ use clvm_traits::{FromClvmError, ToClvmError};
 use clvmr::error::EvalErr;
 use hex::FromHexError;
 use sage_api::ErrorKind;
-#[cfg(feature = "native")]
 use sage_assets::UriError;
 use sage_database::DatabaseError;
 use sage_keychain::KeychainError;
@@ -55,9 +54,11 @@ pub enum Error {
     #[error("Driver error: {0}")]
     Driver(#[from] DriverError),
 
-    #[cfg(feature = "native")]
     #[error("URI error: {0}")]
     Uri(#[from] UriError),
+
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
 
     #[error("To CLVM error: {0}")]
     ToClvm(#[from] ToClvmError),
@@ -257,6 +258,15 @@ pub enum Error {
     #[error("Store error: {0}")]
     Store(String),
 
+    #[error("{0}")]
+    OfferCode(String),
+
+    /// Only the active wallet's database is mounted in the browser, so any
+    /// request naming a different wallet has to be refused instead of silently
+    /// acting on the wrong data.
+    #[error("Wallet {0} is not the active wallet, so its database isn't available")]
+    InactiveWallet(u32),
+
     #[cfg(feature = "native")]
     #[error("Timeout")]
     Timeout(#[from] Elapsed),
@@ -287,6 +297,7 @@ impl Error {
             | Self::LogSubscriber(..)
             | Self::Timeout(..) => ErrorKind::Internal,
             Self::Io(..)
+            | Self::Http(..)
             | Self::Store(..)
             | Self::Bip39(..)
             | Self::TomlDe(..)
@@ -310,7 +321,8 @@ impl Error {
             | Self::MissingDid(..)
             | Self::MissingNft(..)
             | Self::MissingOption(..)
-            | Self::MissingOffer(..) => ErrorKind::NotFound,
+            | Self::MissingOffer(..)
+            | Self::InactiveWallet(..) => ErrorKind::NotFound,
             Self::Bls(..)
             | Self::Hex(..)
             | Self::InvalidKey
@@ -343,9 +355,11 @@ impl Error {
             | Self::MissingUriHash
             | Self::InvalidGroup
             | Self::InvalidThemeJson
+            | Self::Uri(..)
             | Self::MissingThemeData => ErrorKind::Api,
-            #[cfg(feature = "native")]
-            Self::Uri(..) => ErrorKind::Api,
+            // Offer codes are scanned off physical cards, which is what the
+            // interface treats this kind as.
+            Self::OfferCode(..) => ErrorKind::Nfc,
         }
     }
 }
