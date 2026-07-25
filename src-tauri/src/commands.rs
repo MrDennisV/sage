@@ -1,13 +1,12 @@
 use std::{fs, time::Duration};
 
 use chia_wallet_sdk::utils::Address;
-use reqwest::StatusCode;
 use sage::Error;
 use sage_api::{wallet_connect::*, *};
 use sage_api_macro::impl_endpoints_tauri;
 use sage_config::{NetworkConfig, Wallet, WalletDefaults};
 use sage_rpc::start_rpc;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use specta::{Type, specta};
 use tauri::{AppHandle, State, command};
 use tokio::time::sleep;
@@ -181,35 +180,7 @@ pub async fn move_key(state: State<'_, AppState>, fingerprint: u32, index: u32) 
 #[command]
 #[specta]
 pub async fn download_cni_offercode(code: String) -> Result<String> {
-    #[derive(Serialize)]
-    struct Request {
-        code: String,
-    }
-
-    #[derive(Deserialize)]
-    struct Response {
-        offer: String,
-    }
-
-    let response = reqwest::Client::new()
-        .post("https://offercodes.chia.net/download_offer")
-        .json(&Request { code: code.clone() })
-        .send()
-        .await?;
-
-    if response.status() != StatusCode::OK {
-        return Err(crate::error::Error {
-            kind: ErrorKind::Nfc,
-            reason: format!(
-                "Invalid offer code {code}: Server responded with code {}",
-                response.status()
-            ),
-        });
-    }
-
-    let response = response.json::<Response>().await?.offer;
-
-    Ok(response)
+    Ok(sage::download_cni_offercode(code).await?)
 }
 
 #[derive(Serialize, Type)]

@@ -7,6 +7,7 @@ mod peers;
 mod sage;
 #[cfg(feature = "native")]
 mod sage_native;
+mod settings_access;
 mod store;
 mod utils;
 
