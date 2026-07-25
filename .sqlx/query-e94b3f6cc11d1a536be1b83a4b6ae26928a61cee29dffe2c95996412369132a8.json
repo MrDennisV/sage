@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE mempool_items SET submitted_timestamp = unixepoch() WHERE hash = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "e94b3f6cc11d1a536be1b83a4b6ae26928a61cee29dffe2c95996412369132a8"
+}

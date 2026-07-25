@@ -1,12 +1,9 @@
-use chia_protocol::{Bytes32, Program};
-#[cfg(feature = "sqlite")]
-use chia_wallet_sdk::prelude::*;
-#[cfg(feature = "sqlite")]
-use sqlx::query;
+use chia_protocol::{Bytes32, Coin, Program};
 
-#[cfg(feature = "sqlite")]
-use crate::{AssetKind, CoinKind, Convert, Database};
-use crate::{Asset, CoinRow, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
+use crate::{
+    Asset, AssetKind, CoinKind, CoinRow, Convert, Database, DatabaseTx, Result, SqlAccess,
+    SqlExecutor, sql_file,
+};
 
 #[derive(Debug, Clone)]
 pub struct DidCoinInfo {
@@ -22,66 +19,54 @@ pub struct DidRow {
     pub coin_row: CoinRow,
 }
 
-#[cfg(feature = "sqlite")]
-impl Database {
+impl<E: SqlExecutor> Database<E> {
     pub async fn owned_dids(&self) -> Result<Vec<DidRow>> {
-        query!(
-            "
-            SELECT
-                asset_hash, asset_name, asset_ticker, asset_precision, asset_icon_url,
-                asset_description, asset_is_visible, asset_is_sensitive_content,
-                asset_hidden_puzzle_hash, owned_coins.created_height, spent_height,
-                parent_coin_hash, puzzle_hash, amount, p2_puzzle_hash,
-                metadata, recovery_list_hash, num_verifications_required,
-                offer_hash, created_timestamp, spent_timestamp,
-                clawback_expiration_seconds AS clawback_timestamp
-            FROM owned_coins
-            INNER JOIN dids ON dids.asset_id = owned_coins.asset_id
-            ORDER BY asset_name ASC
-            "
-        )
-        .fetch_all(self.pool())
+        owned_dids(&self.executor).await
+    }
+}
+
+async fn owned_dids(mut conn: impl SqlAccess) -> Result<Vec<DidRow>> {
+    conn.fetch_all(sql_file!("dids/owned_dids.sql"), vec![])
         .await?
-        .into_iter()
+        .iter()
         .map(|row| {
             Ok(DidRow {
                 asset: Asset {
-                    hash: row.asset_hash.convert()?,
-                    name: row.asset_name,
-                    ticker: row.asset_ticker,
-                    precision: row.asset_precision.convert()?,
-                    icon_url: row.asset_icon_url,
-                    description: row.asset_description,
-                    is_visible: row.asset_is_visible,
-                    is_sensitive_content: row.asset_is_sensitive_content,
-                    hidden_puzzle_hash: row.asset_hidden_puzzle_hash.convert()?,
+                    hash: row.converted("asset_hash")?,
+                    name: row.opt_text("asset_name")?,
+                    ticker: row.opt_text("asset_ticker")?,
+                    precision: row.i64("asset_precision")?.convert()?,
+                    icon_url: row.opt_text("asset_icon_url")?,
+                    description: row.opt_text("asset_description")?,
+                    is_visible: row.i64("asset_is_visible")? != 0,
+                    is_sensitive_content: row.i64("asset_is_sensitive_content")? != 0,
+                    hidden_puzzle_hash: row.opt_converted("asset_hidden_puzzle_hash")?,
                     kind: AssetKind::Did,
                 },
                 did_info: DidCoinInfo {
-                    metadata: row.metadata.into(),
-                    recovery_list_hash: row.recovery_list_hash.convert()?,
-                    num_verifications_required: row.num_verifications_required.convert()?,
+                    metadata: row.blob("metadata")?.into(),
+                    recovery_list_hash: row.opt_converted("recovery_list_hash")?,
+                    num_verifications_required: row.i64("num_verifications_required")?.convert()?,
                 },
                 coin_row: CoinRow {
                     coin: Coin::new(
-                        row.parent_coin_hash.convert()?,
-                        row.puzzle_hash.convert()?,
-                        row.amount.convert()?,
+                        row.converted("parent_coin_hash")?,
+                        row.converted("puzzle_hash")?,
+                        row.converted("amount")?,
                     ),
-                    p2_puzzle_hash: row.p2_puzzle_hash.convert()?,
+                    p2_puzzle_hash: row.converted("p2_puzzle_hash")?,
                     kind: CoinKind::Did,
                     mempool_item_hash: None,
-                    offer_hash: row.offer_hash.convert()?,
-                    clawback_timestamp: row.clawback_timestamp.convert()?,
-                    created_height: row.created_height.convert()?,
-                    spent_height: row.spent_height.convert()?,
-                    created_timestamp: row.created_timestamp.convert()?,
-                    spent_timestamp: row.spent_timestamp.convert()?,
+                    offer_hash: row.opt_converted("offer_hash")?,
+                    clawback_timestamp: row.opt_i64("clawback_timestamp")?.convert()?,
+                    created_height: row.opt_i64("created_height")?.convert()?,
+                    spent_height: row.opt_i64("spent_height")?.convert()?,
+                    created_timestamp: row.opt_i64("created_timestamp")?.convert()?,
+                    spent_timestamp: row.opt_i64("spent_timestamp")?.convert()?,
                 },
             })
         })
         .collect()
-    }
 }
 
 impl<E: SqlExecutor> DatabaseTx<'_, E> {

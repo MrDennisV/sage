@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT hash, data, mime_type, is_hash_match FROM files WHERE hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "data",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "mime_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_hash_match",
+        "ordinal": 3,
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "636cefe11d20ea45e8a100e2e5a4f785eabf3346b3c08521bad006de7c2860c9"
+}

@@ -6383,6 +6383,7 @@ dependencies = [
  "chia-puzzle-types",
  "chia-sdk-driver",
  "chia-sdk-types",
+ "chia-sdk-utils",
  "chia-wallet-sdk",
  "clvm-traits 0.36.1",
  "clvm-utils",

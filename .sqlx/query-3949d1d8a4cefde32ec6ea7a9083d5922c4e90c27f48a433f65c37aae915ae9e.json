@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) AS count FROM coins\nWHERE asset_id IS NOT NULL\nAND (spent_height IS NULL OR is_children_synced = TRUE)\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3949d1d8a4cefde32ec6ea7a9083d5922c4e90c27f48a433f65c37aae915ae9e"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT amount FROM selectable_coins WHERE asset_hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "amount",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d58869d7688515b8a7dfbede718cc3ad8614be7d44e51d10b7e21035ac8db1ff"
+}

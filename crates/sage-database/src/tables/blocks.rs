@@ -1,19 +1,12 @@
 use chia_protocol::Bytes32;
-#[cfg(feature = "sqlite")]
-use sqlx::SqliteExecutor;
 
-use crate::{
-    Convert, Database, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file,
-};
-
-#[cfg(feature = "sqlite")]
-impl Database {
-    pub async fn unsynced_blocks(&self, limit: u32) -> Result<Vec<u32>> {
-        unsynced_blocks(self.pool(), limit).await
-    }
-}
+use crate::{Convert, Database, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
 
 impl<E: SqlExecutor> Database<E> {
+    pub async fn unsynced_blocks(&self, limit: u32) -> Result<Vec<u32>> {
+        unsynced_blocks(&self.executor, limit).await
+    }
+
     pub async fn insert_block(
         &self,
         height: u32,
@@ -42,28 +35,20 @@ async fn insert_height(mut conn: impl SqlAccess, height: u32) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn unsynced_blocks(conn: impl SqliteExecutor<'_>, limit: u32) -> Result<Vec<u32>> {
-    let row = sqlx::query!(
-        "
-        SELECT created_height AS height FROM coins
-        INNER JOIN blocks ON blocks.height = coins.created_height
-        WHERE blocks.timestamp IS NULL
-        UNION
-        SELECT spent_height AS height FROM coins
-        INNER JOIN blocks ON blocks.height = coins.spent_height
-        WHERE blocks.timestamp IS NULL
-        ORDER BY height DESC
-        LIMIT ?
-        ",
-        limit
-    )
-    .fetch_all(conn)
-    .await?;
+async fn unsynced_blocks(mut conn: impl SqlAccess, limit: u32) -> Result<Vec<u32>> {
+    let rows = conn
+        .fetch_all(sql_file!("blocks/unsynced_blocks.sql"), vec![limit.into()])
+        .await?;
 
-    row.into_iter()
-        .filter_map(|r| r.height.convert().transpose())
-        .collect()
+    let mut heights = Vec::new();
+
+    for row in &rows {
+        if let Some(height) = row.opt_i64("height")? {
+            heights.push(height.convert()?);
+        }
+    }
+
+    Ok(heights)
 }
 
 async fn insert_block(

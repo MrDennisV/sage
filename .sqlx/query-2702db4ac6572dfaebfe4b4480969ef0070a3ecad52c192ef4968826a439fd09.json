@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO offers (\n    hash, encoded_offer, fee, status,\n    expiration_height, expiration_timestamp, inserted_timestamp\n)\nVALUES (?, ?, ?, ?, ?, ?, ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "2702db4ac6572dfaebfe4b4480969ef0070a3ecad52c192ef4968826a439fd09"
+}

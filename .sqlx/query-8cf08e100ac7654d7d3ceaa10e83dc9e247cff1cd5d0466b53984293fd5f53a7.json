@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE files SET data = NULL WHERE hash = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "8cf08e100ac7654d7d3ceaa10e83dc9e247cff1cd5d0466b53984293fd5f53a7"
+}

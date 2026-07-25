@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n    offers.hash as offer_id,\n    encoded_offer,\n    fee,\n    status,\n    expiration_height,\n    expiration_timestamp,\n    inserted_timestamp\nFROM offers\nINNER JOIN offer_assets ON offers.id = offer_assets.offer_id\nINNER JOIN assets ON offer_assets.asset_id = assets.id\nWHERE assets.hash = ? AND offers.status = ? OR ? IS NULL\nORDER BY inserted_timestamp DESC\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "offer_id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "encoded_offer",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "fee",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "status",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "expiration_height",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "expiration_timestamp",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "inserted_timestamp",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "623bde732ca278a9b75b03b6c82fb2b51a436046426e0432d9d02d5687220ec8"
+}

@@ -3,8 +3,6 @@ use chia_protocol::Bytes32;
 use chia_sdk_driver::{ClawbackV2, OptionType, OptionUnderlying};
 use chia_sdk_types::{Mod, puzzles::P2DelegatedConditionsArgs};
 use clvm_utils::ToTreeHash;
-#[cfg(feature = "sqlite")]
-use sqlx::{SqliteExecutor, query};
 
 use crate::{
     Convert, Database, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file,
@@ -58,23 +56,20 @@ pub struct DerivationRow {
     pub synthetic_key: PublicKey,
 }
 
-#[cfg(feature = "sqlite")]
-impl Database {
+impl<E: SqlExecutor> Database<E> {
     pub async fn derivations(
         &self,
         is_hardened: bool,
         limit: u32,
         offset: u32,
     ) -> Result<(Vec<DerivationRow>, u32)> {
-        derivations(self.pool(), is_hardened, limit, offset).await
+        derivations(&self.executor, is_hardened, limit, offset).await
     }
 
     pub async fn max_derivation_index(&self, is_hardened: bool) -> Result<Option<u32>> {
-        max_derivation_index(self.pool(), is_hardened).await
+        max_derivation_index(&self.executor, is_hardened).await
     }
-}
 
-impl<E: SqlExecutor> Database<E> {
     pub async fn custody_p2_puzzle_hashes(&self) -> Result<Vec<Bytes32>> {
         custody_p2_puzzle_hashes(&self.executor).await
     }
@@ -247,63 +242,41 @@ async fn derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result
     .convert()
 }
 
-#[cfg(feature = "sqlite")]
-async fn max_derivation_index(
-    conn: impl SqliteExecutor<'_>,
-    is_hardened: bool,
-) -> Result<Option<u32>> {
-    let row = query!(
-        "
-        SELECT MAX(derivation_index) AS derivation_index
-        FROM public_keys
-        WHERE is_hardened = ?
-        ",
-        is_hardened
+async fn max_derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result<Option<u32>> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/max_derivation_index.sql"),
+        vec![is_hardened.into()],
     )
-    .fetch_one(conn)
-    .await?;
-
-    row.derivation_index.convert()
+    .await?
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .opt_i64("derivation_index")?
+    .convert()
 }
 
-#[cfg(feature = "sqlite")]
 async fn derivations(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     is_hardened: bool,
     limit: u32,
     offset: u32,
 ) -> Result<(Vec<DerivationRow>, u32)> {
-    let rows = query!(
-        "
-        SELECT
-            p2_puzzles.hash AS p2_puzzle_hash,
-            public_keys.derivation_index,
-            public_keys.is_hardened,
-            public_keys.key AS synthetic_key,
-            COUNT(*) OVER() AS total
-        FROM p2_puzzles
-        INNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id
-        WHERE public_keys.is_hardened = ?
-        ORDER BY public_keys.derivation_index ASC
-        LIMIT ? OFFSET ?
-        ",
-        is_hardened,
-        limit,
-        offset
-    )
-    .fetch_all(conn)
-    .await?;
+    let rows = conn
+        .fetch_all(
+            sql_file!("p2_puzzles/derivations.sql"),
+            vec![is_hardened.into(), limit.into(), offset.into()],
+        )
+        .await?;
 
-    let total_count = rows.first().map_or(Ok(0), |row| row.total.try_into())?;
+    let total_count = rows.first().map_or(Ok(0), |row| row.i64("total")?.convert())?;
 
     let derivations = rows
-        .into_iter()
+        .iter()
         .map(|row| {
             Ok(DerivationRow {
-                p2_puzzle_hash: row.p2_puzzle_hash.convert()?,
-                index: row.derivation_index.convert()?,
-                hardened: row.is_hardened,
-                synthetic_key: row.synthetic_key.convert()?,
+                p2_puzzle_hash: row.converted("p2_puzzle_hash")?,
+                index: row.i64("derivation_index")?.convert()?,
+                hardened: row.i64("is_hardened")? != 0,
+                synthetic_key: row.converted("synthetic_key")?,
             })
         })
         .collect::<Result<Vec<DerivationRow>>>()?;

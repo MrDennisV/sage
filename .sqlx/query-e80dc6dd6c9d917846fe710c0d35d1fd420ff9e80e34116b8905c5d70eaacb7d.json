@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT hash, uri, last_checked_timestamp, failed_attempts\nFROM file_uris\nINNER JOIN files ON files.id = file_uris.file_id\nWHERE data IS NULL\nAND (last_checked_timestamp IS NULL OR unixepoch() - last_checked_timestamp >= ?)\nAND failed_attempts < ?\nLIMIT ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "uri",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_checked_timestamp",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "failed_attempts",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e80dc6dd6c9d917846fe710c0d35d1fd420ff9e80e34116b8905c5d70eaacb7d"
+}

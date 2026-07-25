@@ -1,13 +1,7 @@
 use chia_bls::Signature;
-#[cfg(feature = "sqlite")]
-use chia_protocol::Coin;
-use chia_protocol::{Bytes32, CoinSpend};
-#[cfg(feature = "sqlite")]
-use sqlx::{SqliteExecutor, query};
+use chia_protocol::{Bytes32, Coin, CoinSpend};
 
-#[cfg(feature = "sqlite")]
-use crate::{Convert, Database};
-use crate::{DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
+use crate::{Database, DatabaseTx, Result, SqlAccess, SqlExecutor, SqlRow, sql_file};
 
 #[derive(Debug, Clone)]
 pub struct MempoolItem {
@@ -17,26 +11,25 @@ pub struct MempoolItem {
     pub submitted_timestamp: Option<u64>,
 }
 
-#[cfg(feature = "sqlite")]
-impl Database {
+impl<E: SqlExecutor> Database<E> {
     pub async fn mempool_items_to_submit(
         &self,
         check_every_seconds: i64,
         limit: i64,
     ) -> Result<Vec<MempoolItem>> {
-        mempool_items_to_submit(self.pool(), check_every_seconds, limit).await
+        mempool_items_to_submit(&self.executor, check_every_seconds, limit).await
     }
 
     pub async fn mempool_coin_spends(&self, mempool_item_id: Bytes32) -> Result<Vec<CoinSpend>> {
-        mempool_coin_spends(self.pool(), mempool_item_id).await
+        mempool_coin_spends(&self.executor, mempool_item_id).await
     }
 
     pub async fn update_mempool_item_time(&self, mempool_item_id: Bytes32) -> Result<()> {
-        update_mempool_item_time(self.pool(), mempool_item_id).await
+        update_mempool_item_time(&self.executor, mempool_item_id).await
     }
 
     pub async fn mempool_items(&self) -> Result<Vec<MempoolItem>> {
-        mempool_items(self.pool()).await
+        mempool_items(&self.executor).await
     }
 }
 
@@ -149,65 +142,51 @@ async fn insert_mempool_spend(
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
+/// Decodes the columns shared by the `mempool_items_to_submit` and
+/// `mempool_items` queries.
+fn mempool_item_from_row(row: &SqlRow) -> Result<MempoolItem> {
+    Ok(MempoolItem {
+        hash: row.converted("hash")?,
+        aggregated_signature: row.converted("aggregated_signature")?,
+        fee: row.converted("fee")?,
+        submitted_timestamp: row.opt_i64("submitted_timestamp")?.map(|ts| ts as u64),
+    })
+}
+
 async fn mempool_items_to_submit(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     check_every_seconds: i64,
     limit: i64,
 ) -> Result<Vec<MempoolItem>> {
-    query!(
-        "
-        SELECT hash, aggregated_signature, fee, submitted_timestamp
-        FROM mempool_items
-        WHERE submitted_timestamp IS NULL OR unixepoch() - submitted_timestamp >= ?
-        LIMIT ?
-        ",
-        check_every_seconds,
-        limit
+    conn.fetch_all(
+        sql_file!("mempool_items/mempool_items_to_submit.sql"),
+        vec![check_every_seconds.into(), limit.into()],
     )
-    .fetch_all(conn)
     .await?
-    .into_iter()
-    .map(|row| {
-        Ok(MempoolItem {
-            hash: row.hash.convert()?,
-            aggregated_signature: row.aggregated_signature.convert()?,
-            fee: row.fee.convert()?,
-            submitted_timestamp: row.submitted_timestamp.map(|ts| ts as u64),
-        })
-    })
+    .iter()
+    .map(mempool_item_from_row)
     .collect()
 }
 
-#[cfg(feature = "sqlite")]
 async fn mempool_coin_spends(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     mempool_item_id: Bytes32,
 ) -> Result<Vec<CoinSpend>> {
-    let mempool_item_id = mempool_item_id.as_ref();
-
-    query!(
-        "
-        SELECT parent_coin_hash, puzzle_hash, amount, puzzle_reveal, solution
-        FROM mempool_spends
-        INNER JOIN mempool_items ON mempool_items.id = mempool_spends.mempool_item_id
-        WHERE mempool_items.hash = ?
-        ORDER BY seq ASC
-        ",
-        mempool_item_id
+    conn.fetch_all(
+        sql_file!("mempool_items/mempool_coin_spends.sql"),
+        vec![mempool_item_id.into()],
     )
-    .fetch_all(conn)
     .await?
-    .into_iter()
+    .iter()
     .map(|row| {
         Ok(CoinSpend::new(
             Coin::new(
-                row.parent_coin_hash.convert()?,
-                row.puzzle_hash.convert()?,
-                row.amount.convert()?,
+                row.converted("parent_coin_hash")?,
+                row.converted("puzzle_hash")?,
+                row.converted("amount")?,
             ),
-            row.puzzle_reveal.into(),
-            row.solution.into(),
+            row.blob("puzzle_reveal")?.into(),
+            row.blob("solution")?.into(),
         ))
     })
     .collect()
@@ -257,42 +236,23 @@ async fn remove_mempool_item(mut conn: impl SqlAccess, mempool_item_id: Bytes32)
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
 async fn update_mempool_item_time(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     mempool_item_id: Bytes32,
 ) -> Result<()> {
-    let mempool_item_id = mempool_item_id.as_ref();
-
-    query!(
-        "UPDATE mempool_items SET submitted_timestamp = unixepoch() WHERE hash = ?",
-        mempool_item_id
+    conn.execute(
+        sql_file!("mempool_items/update_mempool_item_time.sql"),
+        vec![mempool_item_id.into()],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
-async fn mempool_items(conn: impl SqliteExecutor<'_>) -> Result<Vec<MempoolItem>> {
-    query!(
-        "
-        SELECT hash, aggregated_signature, fee, submitted_timestamp
-        FROM mempool_items
-        ORDER BY submitted_timestamp DESC, hash ASC
-        ",
-    )
-    .fetch_all(conn)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(MempoolItem {
-            hash: row.hash.convert()?,
-            aggregated_signature: row.aggregated_signature.convert()?,
-            fee: row.fee.convert()?,
-            submitted_timestamp: row.submitted_timestamp.map(|ts| ts as u64),
-        })
-    })
-    .collect()
+async fn mempool_items(mut conn: impl SqlAccess) -> Result<Vec<MempoolItem>> {
+    conn.fetch_all(sql_file!("mempool_items/mempool_items.sql"), vec![])
+        .await?
+        .iter()
+        .map(mempool_item_from_row)
+        .collect()
 }

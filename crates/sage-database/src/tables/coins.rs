@@ -1,12 +1,11 @@
 use chia_protocol::{Bytes32, Coin, CoinState};
 use chia_puzzle_types::{LineageProof, Proof};
 use chia_sdk_driver::{Cat, CatInfo, OptionContract, OptionInfo};
-#[cfg(feature = "sqlite")]
-use sqlx::{Row, SqliteExecutor, query};
 
 use crate::{
     AssetKind, Convert, Database, DatabaseError, DatabaseTx, Result, SerializedDid,
-    SerializedDidInfo, SerializedNft, SerializedNftInfo, SqlAccess, SqlExecutor, SqlRow, sql_file,
+    SerializedDidInfo, SerializedNft, SerializedNftInfo, SqlAccess, SqlExecutor, SqlRow, SqlValue,
+    sql_file,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -64,10 +63,9 @@ pub struct UnsyncedCoin {
     pub is_children_unsynced: bool,
 }
 
-#[cfg(feature = "sqlite")]
-impl Database {
+impl<E: SqlExecutor> Database<E> {
     pub async fn coins_by_ids(&self, coin_ids: &[String]) -> Result<Vec<CoinRow>> {
-        coins_by_ids(self.pool(), coin_ids).await
+        coins_by_ids(&self.executor, coin_ids).await
     }
 
     pub async fn coin_records(
@@ -80,7 +78,7 @@ impl Database {
         filter_mode: CoinFilterMode,
     ) -> Result<(Vec<CoinRow>, u32)> {
         coin_records(
-            self.pool(),
+            &self.executor,
             asset_filter,
             limit,
             offset,
@@ -92,55 +90,53 @@ impl Database {
     }
 
     pub async fn are_coins_spendable(&self, coin_ids: &[String]) -> Result<bool> {
-        are_coins_spendable(self.pool(), coin_ids).await
+        are_coins_spendable(&self.executor, coin_ids).await
     }
 
     pub async fn total_coin_count(&self) -> Result<u32> {
-        total_coin_count(self.pool()).await
+        total_coin_count(&self.executor).await
     }
 
     pub async fn selectable_xch_coin_count(&self) -> Result<u32> {
-        selectable_coin_count(self.pool(), Bytes32::default()).await
+        selectable_coin_count(&self.executor, Bytes32::default()).await
     }
 
     pub async fn selectable_cat_coin_count(&self, asset_id: Bytes32) -> Result<u32> {
-        selectable_coin_count(self.pool(), asset_id).await
+        selectable_coin_count(&self.executor, asset_id).await
     }
 
     pub async fn synced_coin_count(&self) -> Result<u32> {
-        synced_coin_count(self.pool()).await
+        synced_coin_count(&self.executor).await
     }
 
     pub async fn xch_balance(&self) -> Result<u128> {
-        token_balance(self.pool(), Bytes32::default()).await
+        token_balance(&self.executor, Bytes32::default()).await
     }
 
     pub async fn cat_balance(&self, asset_id: Bytes32) -> Result<u128> {
-        token_balance(self.pool(), asset_id).await
+        token_balance(&self.executor, asset_id).await
     }
 
     pub async fn selectable_xch_balance(&self) -> Result<u128> {
-        selectable_token_balance(self.pool(), Bytes32::default()).await
+        selectable_token_balance(&self.executor, Bytes32::default()).await
     }
 
     pub async fn selectable_cat_balance(&self, asset_id: Bytes32) -> Result<u128> {
-        selectable_token_balance(self.pool(), asset_id).await
+        selectable_token_balance(&self.executor, asset_id).await
     }
 
     pub async fn spendable_did(&self, launcher_id: Bytes32) -> Result<Option<SerializedDid>> {
-        spendable_did(self.pool(), launcher_id).await
+        spendable_did(&self.executor, launcher_id).await
     }
 
     pub async fn spendable_nft(&self, launcher_id: Bytes32) -> Result<Option<SerializedNft>> {
-        spendable_nft(self.pool(), launcher_id).await
+        spendable_nft(&self.executor, launcher_id).await
     }
 
     pub async fn spendable_option(&self, launcher_id: Bytes32) -> Result<Option<OptionContract>> {
-        spendable_option(self.pool(), launcher_id).await
+        spendable_option(&self.executor, launcher_id).await
     }
-}
 
-impl<E: SqlExecutor> Database<E> {
     pub async fn unsynced_coins(&self, limit: usize) -> Result<Vec<UnsyncedCoin>> {
         unsynced_coins(&self.executor, limit).await
     }
@@ -207,17 +203,14 @@ impl<E: SqlExecutor> Database<E> {
     }
 }
 
-#[cfg(feature = "sqlite")]
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn set_transaction_children_unsynced(
         &mut self,
         mempool_item_id: Bytes32,
     ) -> Result<()> {
-        set_transaction_children_unsynced(&mut *self.tx, mempool_item_id).await
+        set_transaction_children_unsynced(&mut self.tx, mempool_item_id).await
     }
-}
 
-impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_coin(&mut self, coin_state: CoinState) -> Result<()> {
         insert_coin(&mut self.tx, coin_state).await
     }
@@ -252,27 +245,37 @@ impl<E: SqlExecutor> DatabaseTx<'_, E> {
     }
 }
 
-#[cfg(feature = "sqlite")]
-async fn are_coins_spendable(conn: impl SqliteExecutor<'_>, coin_ids: &[String]) -> Result<bool> {
+/// Joins the hex coin ids into `X'..'` literals, matching how the sqlx
+/// `QueryBuilder` inlined them.
+fn coin_hash_literals(coin_ids: &[String]) -> String {
+    coin_ids
+        .iter()
+        .map(|coin_id| format!("X'{coin_id}'"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+async fn are_coins_spendable(mut conn: impl SqlAccess, coin_ids: &[String]) -> Result<bool> {
     if coin_ids.is_empty() {
         return Ok(false);
     }
 
-    let mut query = sqlx::QueryBuilder::new(
-        "
+    let mut sql = "
         SELECT COUNT(*) AS count
         FROM spendable_coins
         WHERE 1=1
-        AND coin_hash IN (",
-    );
+        AND coin_hash IN ("
+        .to_string();
 
-    let mut separated = query.separated(", ");
-    for coin_id in coin_ids {
-        separated.push(format!("X'{coin_id}'"));
-    }
-    separated.push_unseparated(")");
+    sql.push_str(&coin_hash_literals(coin_ids));
+    sql.push(')');
 
-    let count: i64 = query.build().fetch_one(conn).await?.get("count");
+    let count = conn
+        .fetch_all(&sql, vec![])
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?;
 
     #[allow(clippy::cast_possible_wrap)]
     Ok(count == coin_ids.len() as i64)
@@ -361,24 +364,14 @@ async fn set_children_synced(mut conn: impl SqlAccess, coin_id: Bytes32) -> Resu
     Ok(())
 }
 
-#[cfg(feature = "sqlite")]
 async fn set_transaction_children_unsynced(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     mempool_item_id: Bytes32,
 ) -> Result<()> {
-    let mempool_item_id = mempool_item_id.as_ref();
-
-    query!(
-        "
-        UPDATE coins SET is_children_synced = FALSE WHERE id IN (
-            SELECT coin_id FROM mempool_coins
-            INNER JOIN mempool_items ON mempool_items.id = mempool_coins.mempool_item_id
-            WHERE mempool_items.hash = ? AND is_input = TRUE
-        )
-        ",
-        mempool_item_id
+    conn.execute(
+        sql_file!("coins/set_transaction_children_unsynced.sql"),
+        vec![mempool_item_id.into()],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
@@ -411,136 +404,102 @@ async fn subscription_coin_ids(mut conn: impl SqlAccess) -> Result<Vec<Bytes32>>
         .collect()
 }
 
-#[cfg(feature = "sqlite")]
-async fn selectable_coin_count(conn: impl SqliteExecutor<'_>, asset_id: Bytes32) -> Result<u32> {
-    let asset_id_ref = asset_id.as_ref();
-
-    query!(
-        "SELECT COUNT(*) AS count FROM selectable_coins WHERE asset_hash = ?",
-        asset_id_ref
+async fn selectable_coin_count(mut conn: impl SqlAccess, asset_id: Bytes32) -> Result<u32> {
+    conn.fetch_all(
+        sql_file!("coins/selectable_coin_count.sql"),
+        vec![asset_id.into()],
     )
-    .fetch_one(conn)
     .await?
-    .count
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .i64("count")?
     .convert()
 }
 
-#[cfg(feature = "sqlite")]
-async fn total_coin_count(conn: impl SqliteExecutor<'_>) -> Result<u32> {
-    query!("SELECT COUNT(*) AS count FROM coins")
-        .fetch_one(conn)
+async fn total_coin_count(mut conn: impl SqlAccess) -> Result<u32> {
+    conn.fetch_all(sql_file!("coins/total_coin_count.sql"), vec![])
         .await?
-        .count
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
         .convert()
 }
 
-#[cfg(feature = "sqlite")]
-async fn synced_coin_count(conn: impl SqliteExecutor<'_>) -> Result<u32> {
-    query!(
-        "
-        SELECT COUNT(*) AS count FROM coins
-        WHERE asset_id IS NOT NULL
-        AND (spent_height IS NULL OR is_children_synced = TRUE)
-        "
-    )
-    .fetch_one(conn)
-    .await?
-    .count
-    .convert()
+async fn synced_coin_count(mut conn: impl SqlAccess) -> Result<u32> {
+    conn.fetch_all(sql_file!("coins/synced_coin_count.sql"), vec![])
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
+        .convert()
 }
 
-#[cfg(feature = "sqlite")]
-async fn token_balance(conn: impl SqliteExecutor<'_>, asset_id: Bytes32) -> Result<u128> {
-    let asset_id_ref = asset_id.as_ref();
+async fn token_balance(mut conn: impl SqlAccess, asset_id: Bytes32) -> Result<u128> {
+    conn.fetch_all(sql_file!("coins/token_balance.sql"), vec![asset_id.into()])
+        .await?
+        .iter()
+        .map(|row| {
+            let amount: u64 = row.converted("amount")?;
+            Ok(amount as u128)
+        })
+        .sum()
+}
 
-    query!(
-        "SELECT amount FROM owned_coins WHERE asset_hash = ?",
-        asset_id_ref
+async fn selectable_token_balance(mut conn: impl SqlAccess, asset_id: Bytes32) -> Result<u128> {
+    conn.fetch_all(
+        sql_file!("coins/selectable_token_balance.sql"),
+        vec![asset_id.into()],
     )
-    .fetch_all(conn)
     .await?
-    .into_iter()
+    .iter()
     .map(|row| {
-        let amount: u64 = row.amount.convert()?;
+        let amount: u64 = row.converted("amount")?;
         Ok(amount as u128)
     })
     .sum()
 }
 
-#[cfg(feature = "sqlite")]
-async fn selectable_token_balance(
-    conn: impl SqliteExecutor<'_>,
-    asset_id: Bytes32,
-) -> Result<u128> {
-    let asset_id_ref = asset_id.as_ref();
-
-    query!(
-        "SELECT amount FROM selectable_coins WHERE asset_hash = ?",
-        asset_id_ref
-    )
-    .fetch_all(conn)
-    .await?
-    .into_iter()
-    .map(|row| {
-        let amount: u64 = row.amount.convert()?;
-        Ok(amount as u128)
+/// Decodes the coin columns shared by the `coins_by_ids` and `coin_records`
+/// queries.
+fn coin_row_from_row(row: &SqlRow) -> Result<CoinRow> {
+    Ok(CoinRow {
+        coin: Coin::new(
+            row.converted("parent_coin_hash")?,
+            row.converted("puzzle_hash")?,
+            row.converted("amount")?,
+        ),
+        p2_puzzle_hash: row.converted("p2_puzzle_hash")?,
+        mempool_item_hash: row.opt_converted("mempool_item_hash")?,
+        offer_hash: row.opt_converted("offer_hash")?,
+        kind: CoinKind::Xch,
+        clawback_timestamp: row.opt_i64("clawback_timestamp")?.convert()?,
+        created_height: row.opt_i64("created_height")?.convert()?,
+        spent_height: row.opt_i64("spent_height")?.convert()?,
+        created_timestamp: row.opt_i64("created_timestamp")?.convert()?,
+        spent_timestamp: row.opt_i64("spent_timestamp")?.convert()?,
     })
-    .sum()
 }
 
-#[cfg(feature = "sqlite")]
-async fn coins_by_ids(conn: impl SqliteExecutor<'_>, coin_ids: &[String]) -> Result<Vec<CoinRow>> {
-    let mut query = sqlx::QueryBuilder::new(
-        "
+async fn coins_by_ids(mut conn: impl SqlAccess, coin_ids: &[String]) -> Result<Vec<CoinRow>> {
+    let mut sql = "
        SELECT
             parent_coin_hash, puzzle_hash, amount, spent_height, created_height, p2_puzzle_hash,
             mempool_item_hash, offer_hash, created_timestamp, spent_timestamp, clawback_expiration_seconds AS clawback_timestamp
         FROM wallet_coins
-        WHERE coin_hash IN (",
-    );
-    let mut separated = query.separated(", ");
+        WHERE coin_hash IN (".to_string();
 
-    for coin_id in coin_ids {
-        separated.push(format!("X'{coin_id}'"));
-    }
-    separated.push_unseparated(")");
+    sql.push_str(&coin_hash_literals(coin_ids));
+    sql.push(')');
 
-    let rows = query.build().fetch_all(conn).await?;
-
-    let coins = rows
-        .into_iter()
-        .map(|row| {
-            Ok(CoinRow {
-                coin: Coin::new(
-                    row.get::<Vec<u8>, _>("parent_coin_hash").convert()?,
-                    row.get::<Vec<u8>, _>("puzzle_hash").convert()?,
-                    row.get::<Vec<u8>, _>("amount").convert()?,
-                ),
-                p2_puzzle_hash: row.get::<Vec<u8>, _>("p2_puzzle_hash").convert()?,
-                mempool_item_hash: row
-                    .get::<Option<Vec<u8>>, _>("mempool_item_hash")
-                    .map(Convert::convert)
-                    .transpose()?,
-                offer_hash: row
-                    .get::<Option<Vec<u8>>, _>("offer_hash")
-                    .map(Convert::convert)
-                    .transpose()?,
-                kind: CoinKind::Xch,
-                clawback_timestamp: row.get::<Option<i64>, _>("clawback_timestamp").convert()?,
-                created_height: row.get::<Option<u32>, _>("created_height"),
-                spent_height: row.get::<Option<u32>, _>("spent_height"),
-                created_timestamp: row.get::<Option<i64>, _>("created_timestamp").convert()?,
-                spent_timestamp: row.get::<Option<i64>, _>("spent_timestamp").convert()?,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    Ok(coins)
+    conn.fetch_all(&sql, vec![])
+        .await?
+        .iter()
+        .map(coin_row_from_row)
+        .collect()
 }
 
-#[cfg(feature = "sqlite")]
 async fn coin_records(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     asset_filter: AssetFilter,
     limit: u32,
     offset: u32,
@@ -556,7 +515,7 @@ async fn coin_records(
         CoinFilterMode::Clawback => "clawback_coins",
     };
 
-    let mut query = sqlx::QueryBuilder::new(format!(
+    let mut sql = format!(
         "
         SELECT
             parent_coin_hash, puzzle_hash, amount,
@@ -566,76 +525,51 @@ async fn coin_records(
             COUNT(*) OVER () AS total_count
         FROM {table}
         ",
-    ));
+    );
+
+    let mut params = Vec::new();
 
     match asset_filter {
         AssetFilter::Id(asset_id) => {
-            query.push(" WHERE asset_hash = ");
-            query.push_bind(asset_id.to_vec());
+            sql.push_str(" WHERE asset_hash = ?");
+            params.push(SqlValue::from(asset_id.to_vec()));
         }
         AssetFilter::Nfts => {
-            query.push(" WHERE asset_kind = 1");
+            sql.push_str(" WHERE asset_kind = 1");
         }
         AssetFilter::Dids => {
-            query.push(" WHERE asset_kind = 2");
+            sql.push_str(" WHERE asset_kind = 2");
         }
     }
 
-    query.push(" ORDER BY ");
-    match sort_mode {
-        CoinSortMode::CoinId if ascending => query.push("coin_hash ASC"),
-        CoinSortMode::CoinId => query.push("coin_hash DESC"),
-        CoinSortMode::Amount if ascending => query.push("amount ASC"),
-        CoinSortMode::Amount => query.push("amount DESC"),
-        CoinSortMode::CreatedHeight if ascending => query.push("created_height ASC NULLS LAST"),
-        CoinSortMode::CreatedHeight => query.push("created_height DESC NULLS FIRST"),
-        CoinSortMode::SpentHeight if ascending => query.push("spent_height ASC NULLS LAST"),
-        CoinSortMode::SpentHeight => query.push("spent_height DESC NULLS FIRST"),
-        CoinSortMode::ClawbackTimestamp if ascending => query.push("clawback_timestamp ASC"),
-        CoinSortMode::ClawbackTimestamp => query.push("clawback_timestamp DESC"),
-    };
+    sql.push_str(" ORDER BY ");
+    sql.push_str(match sort_mode {
+        CoinSortMode::CoinId if ascending => "coin_hash ASC",
+        CoinSortMode::CoinId => "coin_hash DESC",
+        CoinSortMode::Amount if ascending => "amount ASC",
+        CoinSortMode::Amount => "amount DESC",
+        CoinSortMode::CreatedHeight if ascending => "created_height ASC NULLS LAST",
+        CoinSortMode::CreatedHeight => "created_height DESC NULLS FIRST",
+        CoinSortMode::SpentHeight if ascending => "spent_height ASC NULLS LAST",
+        CoinSortMode::SpentHeight => "spent_height DESC NULLS FIRST",
+        CoinSortMode::ClawbackTimestamp if ascending => "clawback_timestamp ASC",
+        CoinSortMode::ClawbackTimestamp => "clawback_timestamp DESC",
+    });
 
-    query.push(" LIMIT ");
-    query.push_bind(limit as i64);
-    query.push(" OFFSET ");
-    query.push_bind(offset as i64);
+    sql.push_str(" LIMIT ?");
+    params.push(SqlValue::from(i64::from(limit)));
+    sql.push_str(" OFFSET ?");
+    params.push(SqlValue::from(i64::from(offset)));
 
-    let rows = query.build().fetch_all(conn).await?;
+    let rows = conn.fetch_all(&sql, params).await?;
+
     let total_count = rows
         .first()
-        .map_or(Ok(0), |row| row.get::<i64, _>("total_count").try_into())?;
+        .map_or(Ok(0), |row| row.i64("total_count")?.convert())?;
+
     let coins = rows
-        .into_iter()
-        .map(|row| {
-            Ok(CoinRow {
-                coin: Coin::new(
-                    row.get::<Vec<u8>, _>("parent_coin_hash").convert()?,
-                    row.get::<Vec<u8>, _>("puzzle_hash").convert()?,
-                    row.get::<Vec<u8>, _>("amount").convert()?,
-                ),
-                p2_puzzle_hash: row.get::<Vec<u8>, _>("p2_puzzle_hash").convert()?,
-                mempool_item_hash: row
-                    .get::<Option<Vec<u8>>, _>("mempool_item_hash")
-                    .map(Convert::convert)
-                    .transpose()?,
-                offer_hash: row
-                    .get::<Option<Vec<u8>>, _>("offer_hash")
-                    .map(Convert::convert)
-                    .transpose()?,
-                kind: CoinKind::Xch,
-                clawback_timestamp: row.get::<Option<i64>, _>("clawback_timestamp").convert()?,
-                created_height: row.get::<Option<u32>, _>("created_height"),
-                spent_height: row.get::<Option<u32>, _>("spent_height"),
-                created_timestamp: row
-                    .get::<Option<i64>, _>("created_timestamp")
-                    .map(TryInto::try_into)
-                    .transpose()?,
-                spent_timestamp: row
-                    .get::<Option<i64>, _>("spent_timestamp")
-                    .map(TryInto::try_into)
-                    .transpose()?,
-            })
-        })
+        .iter()
+        .map(coin_row_from_row)
         .collect::<Result<Vec<_>>>()?;
 
     Ok((coins, total_count))
@@ -886,51 +820,18 @@ async fn did(mut conn: impl SqlAccess, launcher_id: Bytes32) -> Result<Option<Se
         .transpose()
 }
 
-#[cfg(feature = "sqlite")]
 async fn spendable_did(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     launcher_id: Bytes32,
 ) -> Result<Option<SerializedDid>> {
-    let launcher_id_ref = launcher_id.as_ref();
-
-    let Some(row) = query!(
-        "
-        SELECT
-            parent_coin_hash, puzzle_hash, amount, p2_puzzle_hash,
-            parent_parent_coin_hash, parent_inner_puzzle_hash, parent_amount,
-            asset_hash AS launcher_id, recovery_list_hash, num_verifications_required, metadata
-        FROM spendable_coins
-        INNER JOIN dids ON dids.asset_id = spendable_coins.asset_id
-        INNER JOIN lineage_proofs ON lineage_proofs.coin_id = spendable_coins.coin_id
-        WHERE asset_hash = ?
-        ",
-        launcher_id_ref
+    conn.fetch_all(
+        sql_file!("coins/spendable_did.sql"),
+        vec![launcher_id.into()],
     )
-    .fetch_optional(conn)
     .await?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(SerializedDid {
-        coin: Coin::new(
-            row.parent_coin_hash.convert()?,
-            row.puzzle_hash.convert()?,
-            row.amount.convert()?,
-        ),
-        proof: Proof::Lineage(LineageProof {
-            parent_parent_coin_info: row.parent_parent_coin_hash.convert()?,
-            parent_inner_puzzle_hash: row.parent_inner_puzzle_hash.convert()?,
-            parent_amount: row.parent_amount.convert()?,
-        }),
-        info: SerializedDidInfo {
-            launcher_id: row.launcher_id.convert()?,
-            recovery_list_hash: row.recovery_list_hash.convert()?,
-            num_verifications_required: row.num_verifications_required.convert()?,
-            metadata: row.metadata.into(),
-            p2_puzzle_hash: row.p2_puzzle_hash.convert()?,
-        },
-    }))
+    .first()
+    .map(did_from_row)
+    .transpose()
 }
 
 async fn nft(mut conn: impl SqlAccess, launcher_id: Bytes32) -> Result<Option<SerializedNft>> {
@@ -941,54 +842,18 @@ async fn nft(mut conn: impl SqlAccess, launcher_id: Bytes32) -> Result<Option<Se
         .transpose()
 }
 
-#[cfg(feature = "sqlite")]
 async fn spendable_nft(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     launcher_id: Bytes32,
 ) -> Result<Option<SerializedNft>> {
-    let launcher_id_ref = launcher_id.as_ref();
-
-    let Some(row) = query!(
-        "
-        SELECT
-            parent_coin_hash, puzzle_hash, amount, p2_puzzle_hash,
-            parent_parent_coin_hash, parent_inner_puzzle_hash, parent_amount,
-            asset_hash AS launcher_id, metadata, metadata_updater_puzzle_hash,
-            owner_hash, royalty_puzzle_hash, royalty_basis_points
-        FROM spendable_coins
-        INNER JOIN nfts ON nfts.asset_id = spendable_coins.asset_id
-        INNER JOIN lineage_proofs ON lineage_proofs.coin_id = spendable_coins.coin_id
-        WHERE asset_hash = ?
-        ",
-        launcher_id_ref
+    conn.fetch_all(
+        sql_file!("coins/spendable_nft.sql"),
+        vec![launcher_id.into()],
     )
-    .fetch_optional(conn)
     .await?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(SerializedNft {
-        coin: Coin::new(
-            row.parent_coin_hash.convert()?,
-            row.puzzle_hash.convert()?,
-            row.amount.convert()?,
-        ),
-        proof: Proof::Lineage(LineageProof {
-            parent_parent_coin_info: row.parent_parent_coin_hash.convert()?,
-            parent_inner_puzzle_hash: row.parent_inner_puzzle_hash.convert()?,
-            parent_amount: row.parent_amount.convert()?,
-        }),
-        info: SerializedNftInfo {
-            launcher_id: row.launcher_id.convert()?,
-            metadata: row.metadata.into(),
-            metadata_updater_puzzle_hash: row.metadata_updater_puzzle_hash.convert()?,
-            current_owner: row.owner_hash.convert()?,
-            royalty_puzzle_hash: row.royalty_puzzle_hash.convert()?,
-            royalty_basis_points: row.royalty_basis_points.convert()?,
-            p2_puzzle_hash: row.p2_puzzle_hash.convert()?,
-        },
-    }))
+    .first()
+    .map(nft_from_row)
+    .transpose()
 }
 
 async fn option(mut conn: impl SqlAccess, launcher_id: Bytes32) -> Result<Option<OptionContract>> {
@@ -999,50 +864,16 @@ async fn option(mut conn: impl SqlAccess, launcher_id: Bytes32) -> Result<Option
         .transpose()
 }
 
-#[cfg(feature = "sqlite")]
 async fn spendable_option(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     launcher_id: Bytes32,
 ) -> Result<Option<OptionContract>> {
-    let launcher_id_ref = launcher_id.as_ref();
-
-    let Some(row) = query!(
-        "
-        SELECT
-            parent_coin_hash, puzzle_hash, amount, p2_puzzle_hash,
-            parent_parent_coin_hash, parent_inner_puzzle_hash, parent_amount,
-            asset_hash AS launcher_id,
-            (SELECT hash FROM coins WHERE id = underlying_coin_id) AS underlying_coin_hash,
-            underlying_delegated_puzzle_hash
-        FROM spendable_coins
-        INNER JOIN options ON options.asset_id = spendable_coins.asset_id
-        INNER JOIN lineage_proofs ON lineage_proofs.coin_id = spendable_coins.coin_id
-        WHERE asset_hash = ?
-        ",
-        launcher_id_ref
+    conn.fetch_all(
+        sql_file!("coins/spendable_option.sql"),
+        vec![launcher_id.into()],
     )
-    .fetch_optional(conn)
     .await?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(OptionContract::new(
-        Coin::new(
-            row.parent_coin_hash.convert()?,
-            row.puzzle_hash.convert()?,
-            row.amount.convert()?,
-        ),
-        Proof::Lineage(LineageProof {
-            parent_parent_coin_info: row.parent_parent_coin_hash.convert()?,
-            parent_inner_puzzle_hash: row.parent_inner_puzzle_hash.convert()?,
-            parent_amount: row.parent_amount.convert()?,
-        }),
-        OptionInfo::new(
-            row.launcher_id.convert()?,
-            row.underlying_coin_hash.convert()?,
-            row.underlying_delegated_puzzle_hash.convert()?,
-            row.p2_puzzle_hash.convert()?,
-        ),
-    )))
+    .first()
+    .map(option_from_row)
+    .transpose()
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO resized_images (file_id, kind, data) VALUES ((SELECT id FROM files WHERE hash = ?), ?, ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "355631d315a583456382be4873aa0390c9063c16a078c5bc365bb230fc328148"
+}

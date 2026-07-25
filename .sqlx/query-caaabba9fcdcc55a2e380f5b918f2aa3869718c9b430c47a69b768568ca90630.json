@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE file_uris\nSET last_checked_timestamp = unixepoch()\nWHERE file_id = (SELECT id FROM files WHERE hash = ?) AND uri = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "caaabba9fcdcc55a2e380f5b918f2aa3869718c9b430c47a69b768568ca90630"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE file_uris \nSET failed_attempts = 0, last_checked_timestamp = NULL\nFROM files\nWHERE file_uris.file_id = files.id AND file_uris.uri = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "8e3ae9829cdfeb8b18d0d680635924506c601255e0f4f8f585fae6a30b7207f6"
+}

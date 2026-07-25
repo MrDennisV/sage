@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE assets SET\n    kind = ?,\n    name = ?,\n    ticker = ?,\n    precision = ?,\n    icon_url = ?,\n    description = ?,\n    is_sensitive_content = ?,\n    is_visible = ?\nWHERE hash = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "a01363853ec9bcf3bb1cad84048b14acf26f67b4af495906dbda374061f9aade"
+}
