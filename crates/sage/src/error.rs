@@ -223,6 +223,13 @@ pub enum Error {
     #[error("No peers are currently available")]
     NoPeers,
 
+    #[error("Transaction {transaction_id} was rejected with status {status}: {error:?}")]
+    TransactionRejected {
+        transaction_id: Bytes32,
+        status: u8,
+        error: Option<String>,
+    },
+
     #[error("Could not fetch NFT with id: {0}")]
     CouldNotFetchNft(Bytes32),
 
@@ -240,6 +247,9 @@ pub enum Error {
 
     #[error("Missing asset id")]
     MissingAssetId,
+
+    #[error("URI content can't be downloaded here, so its hash must be provided")]
+    MissingUriHash,
 
     #[error("Database version too old")]
     DatabaseVersionTooOld,
@@ -326,9 +336,11 @@ impl Error {
             | Self::CoinSpent(..)
             | Self::IpAddrParse(..)
             | Self::NoPeers
+            | Self::TransactionRejected { .. }
             | Self::CouldNotFetchNft(..)
             | Self::CouldNotFetchOption(..)
             | Self::MissingAssetId
+            | Self::MissingUriHash
             | Self::InvalidGroup
             | Self::InvalidThemeJson
             | Self::MissingThemeData => ErrorKind::Api,

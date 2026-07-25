@@ -14,5 +14,4 @@ pub use error::*;
 pub use sage::*;
 pub use store::*;
 
-#[cfg(feature = "native")]
 pub(crate) use utils::*;

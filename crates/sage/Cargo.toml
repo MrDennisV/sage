@@ -32,7 +32,9 @@ sage-api = { workspace = true }
 sage-database = { workspace = true }
 sage-config = { workspace = true }
 sage-keychain = { workspace = true }
-sage-wallet = { workspace = true }
+# The Coinset HTTP peer is how transactions reach the network where there is
+# no peer connection pool, such as in the browser.
+sage-wallet = { workspace = true, features = ["coinset"] }
 sage-assets = { workspace = true }
 
 # Full SDK is only needed for networking and peers (native)
@@ -41,7 +43,8 @@ chia-wallet-sdk = { workspace = true, features = ["rustls"], optional = true }
 # Individual chia sub-crates, available on every target
 chia-bls = { workspace = true }
 chia-protocol = { workspace = true }
-chia-sdk-driver = { workspace = true }
+chia-puzzle-types = { workspace = true }
+chia-sdk-driver = { workspace = true, features = ["offer-compression"] }
 chia-sdk-signer = { workspace = true }
 chia-sdk-utils = { workspace = true }
 clvm-traits = { workspace = true }

@@ -1,10 +1,8 @@
+#[cfg(feature = "native")]
 use std::time::Duration;
 
-use chia_wallet_sdk::{
-    chia::puzzle_types::nft::NftMetadata,
-    driver::{MetadataUpdate, UriKind},
-    prelude::*,
-};
+use chia_puzzle_types::nft::NftMetadata;
+use chia_sdk_driver::{MetadataUpdate, UriKind};
 use itertools::Itertools;
 use sage_api::{
     AddNftUri, AssignNftsToDid, AutoCombineCat, AutoCombineCatResponse, AutoCombineXch,
@@ -15,9 +13,12 @@ use sage_api::{
     TransactionResponse, TransferDids, TransferNfts, TransferOptions, ViewCoinSpends,
     ViewCoinSpendsResponse,
 };
+#[cfg(feature = "native")]
 use sage_assets::fetch_uris_without_hash;
-use sage_database::{Asset, AssetKind};
+use sage_database::{Asset, AssetKind, SqlExecutor};
+use sage_wallet::prelude::*;
 use sage_wallet::{MultiSendPayment, WalletNftMint, WalletOptionMint};
+#[cfg(feature = "native")]
 use tokio::time::timeout;
 
 use crate::{
@@ -26,7 +27,7 @@ use crate::{
     rust_bundle, rust_spend,
 };
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub async fn send_xch(&self, req: SendXch) -> Result<TransactionResponse> {
         let wallet = self.wallet()?;
         let puzzle_hash = self.parse_address(req.address)?;
@@ -572,56 +573,17 @@ impl Sage {
 
         let royalty_ten_thousandths = item.royalty_ten_thousandths;
 
-        let data_hash = if let Some(data_hash) = item.data_hash {
-            Some(parse_hash(data_hash)?)
-        } else if item.data_uris.is_empty() {
-            None
-        } else {
-            let data = timeout(
-                Duration::from_secs(10),
-                fetch_uris_without_hash(item.data_uris.clone(), testnet),
-            )
-            .await??;
+        let data_hash = self
+            .mint_uri_hash(item.data_hash, &item.data_uris, testnet, info)
+            .await?;
 
-            let hash = data.hash;
-            info.nft_data.insert(hash, data);
+        let metadata_hash = self
+            .mint_uri_hash(item.metadata_hash, &item.metadata_uris, testnet, info)
+            .await?;
 
-            Some(hash)
-        };
-
-        let metadata_hash = if let Some(metadata_hash) = item.metadata_hash {
-            Some(parse_hash(metadata_hash)?)
-        } else if item.metadata_uris.is_empty() {
-            None
-        } else {
-            let metadata = timeout(
-                Duration::from_secs(10),
-                fetch_uris_without_hash(item.metadata_uris.clone(), testnet),
-            )
-            .await??;
-
-            let hash = metadata.hash;
-            info.nft_data.insert(hash, metadata);
-
-            Some(hash)
-        };
-
-        let license_hash = if let Some(license_hash) = item.license_hash {
-            Some(parse_hash(license_hash)?)
-        } else if item.license_uris.is_empty() {
-            None
-        } else {
-            let data = timeout(
-                Duration::from_secs(10),
-                fetch_uris_without_hash(item.license_uris.clone(), testnet),
-            )
-            .await??;
-
-            let hash = data.hash;
-            info.nft_data.insert(hash, data);
-
-            Some(hash)
-        };
+        let license_hash = self
+            .mint_uri_hash(item.license_hash, &item.license_uris, testnet, info)
+            .await?;
 
         let p2_puzzle_hash = if let Some(address) = item.address {
             Some(self.parse_address(address)?)
@@ -645,4 +607,56 @@ impl Sage {
             royalty_basis_points: royalty_ten_thousandths,
         })
     }
+
+    /// The content hash to mint a set of URIs under. An explicit hash is used
+    /// as is; otherwise the content is downloaded so the hash can be computed
+    /// and cached for the confirmation summary.
+    async fn mint_uri_hash(
+        &self,
+        hash: Option<String>,
+        uris: &[String],
+        testnet: bool,
+        info: &mut ConfirmationInfo,
+    ) -> Result<Option<Bytes32>> {
+        if let Some(hash) = hash {
+            return Ok(Some(parse_hash(hash)?));
+        }
+
+        if uris.is_empty() {
+            return Ok(None);
+        }
+
+        fetch_uri_hash(uris.to_vec(), testnet, info).await
+    }
+}
+
+/// Downloads the content behind a set of URIs to compute its hash, caching the
+/// blob so the confirmation summary can render it.
+#[cfg(feature = "native")]
+async fn fetch_uri_hash(
+    uris: Vec<String>,
+    testnet: bool,
+    info: &mut ConfirmationInfo,
+) -> Result<Option<Bytes32>> {
+    let data = timeout(
+        Duration::from_secs(10),
+        fetch_uris_without_hash(uris, testnet),
+    )
+    .await??;
+
+    let hash = data.hash;
+    info.nft_data.insert(hash, data);
+
+    Ok(Some(hash))
+}
+
+/// URI content can't be downloaded without a native HTTP client, so the caller
+/// has to supply the hash it should be minted under.
+#[cfg(not(feature = "native"))]
+fn fetch_uri_hash(
+    _uris: Vec<String>,
+    _testnet: bool,
+    _info: &mut ConfirmationInfo,
+) -> impl Future<Output = Result<Option<Bytes32>>> {
+    std::future::ready(Err(Error::MissingUriHash))
 }

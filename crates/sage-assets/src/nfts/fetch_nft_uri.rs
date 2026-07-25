@@ -10,15 +10,7 @@ use tracing::debug;
 
 use crate::UriError;
 
-use super::{Thumbnail, thumbnail as make_thumbnail};
-
-#[derive(Debug, Clone)]
-pub struct Data {
-    pub blob: Vec<u8>,
-    pub mime_type: String,
-    pub hash: Bytes32,
-    pub thumbnail: Option<Thumbnail>,
-}
+use super::{Data, Thumbnail, thumbnail as make_thumbnail};
 
 pub async fn fetch_uri(uri: String, testnet: bool) -> Result<Data, UriError> {
     let response = reqwest::get(&uri).await?;

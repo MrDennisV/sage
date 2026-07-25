@@ -1,29 +1,32 @@
 use std::slice;
 
-use chia_wallet_sdk::{
-    chia::{
-        bls::{master_to_wallet_hardened, master_to_wallet_unhardened, sign},
-        puzzle_types::{DeriveSynthetic, Proof},
-    },
-    driver::P2DelegatedConditionsLayer,
-    prelude::*,
-};
+use chia_bls::{master_to_wallet_hardened, master_to_wallet_unhardened, sign};
+use chia_puzzle_types::{DeriveSynthetic, Proof};
+use chia_sdk_driver::P2DelegatedConditionsLayer;
 use sage_api::wallet_connect::{
     self, AssetCoinType, FilterUnlockedCoins, FilterUnlockedCoinsResponse, GetAssetCoins,
-    GetAssetCoinsResponse, LineageProof, SendTransactionImmediately,
-    SendTransactionImmediatelyResponse, SignMessageByAddress, SignMessageByAddressResponse,
+    GetAssetCoinsResponse, LineageProof, SignMessageByAddress, SignMessageByAddressResponse,
     SignMessageWithPublicKey, SignMessageWithPublicKeyResponse, SpendableCoin,
 };
-use sage_database::{AssetFilter, CoinFilterMode, CoinSortMode, DeserializePrimitive, P2Puzzle};
-use sage_wallet::{Status, SyncCommand, Transaction, insert_transaction, submit_to_peers};
+#[cfg(feature = "native")]
+use sage_api::wallet_connect::{SendTransactionImmediately, SendTransactionImmediatelyResponse};
+use sage_database::{
+    AssetFilter, CoinFilterMode, CoinSortMode, DeserializePrimitive, P2Puzzle, SqlExecutor,
+};
+use sage_wallet::prelude::*;
+#[cfg(feature = "native")]
+use sage_wallet::{Status, submit_to_peers};
+#[cfg(feature = "native")]
 use tracing::{debug, info, warn};
 
+#[cfg(feature = "native")]
+use crate::{parse_coin_id, parse_hash, parse_program, parse_signature};
 use crate::{
-    Error, Result, Sage, parse_asset_id, parse_coin_id, parse_did_id, parse_hash, parse_nft_id,
-    parse_program, parse_public_key, parse_signature, parse_signature_message,
+    Error, Result, Sage, parse_asset_id, parse_did_id, parse_nft_id, parse_public_key,
+    parse_signature_message,
 };
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub async fn filter_unlocked_coins(
         &self,
         req: FilterUnlockedCoins,
@@ -240,14 +243,21 @@ impl Sage {
             signature: hex::encode(signature.to_bytes()),
         })
     }
+}
 
+// Submitting to every connected peer at once needs the peer pool.
+#[cfg(feature = "native")]
+impl Sage {
     pub async fn send_transaction_immediately(
         &self,
         req: SendTransactionImmediately,
     ) -> Result<SendTransactionImmediatelyResponse> {
         // TODO: Should this be the normal way of sending transactions?
 
-        let wallet = self.wallet()?;
+        // Fail before broadcasting anything if there is no wallet to record
+        // the transaction against.
+        self.wallet()?;
+
         let spend_bundle = rust_bundle(req.spend_bundle)?;
         let peers = self.peer_state.lock().await.peers();
 
@@ -257,28 +267,7 @@ impl Sage {
 
         match submit_to_peers(&peers, spend_bundle.clone()).await? {
             Status::Pending => {
-                let peer = self
-                    .peer_state
-                    .lock()
-                    .await
-                    .acquire_peer()
-                    .ok_or(Error::NoPeers)?;
-
-                let subscriptions = insert_transaction(
-                    &wallet.db,
-                    &peer,
-                    wallet.genesis_challenge,
-                    spend_bundle.name(),
-                    Transaction::from_coin_spends(spend_bundle.coin_spends)?,
-                    spend_bundle.aggregated_signature,
-                )
-                .await?;
-
-                self.command_sender
-                    .send(SyncCommand::SubscribeCoins {
-                        coin_ids: subscriptions,
-                    })
-                    .await?;
+                self.submit(spend_bundle).await?;
 
                 info!("Successfully submitted and inserted transaction {transaction_id}");
 
@@ -306,6 +295,7 @@ impl Sage {
     }
 }
 
+#[cfg(feature = "native")]
 fn rust_bundle(spend_bundle: wallet_connect::SpendBundle) -> Result<SpendBundle> {
     Ok(SpendBundle {
         coin_spends: spend_bundle
@@ -317,6 +307,7 @@ fn rust_bundle(spend_bundle: wallet_connect::SpendBundle) -> Result<SpendBundle>
     })
 }
 
+#[cfg(feature = "native")]
 fn rust_spend(coin_spend: wallet_connect::CoinSpend) -> Result<CoinSpend> {
     Ok(CoinSpend {
         coin: rust_coin(coin_spend.coin)?,
@@ -325,6 +316,7 @@ fn rust_spend(coin_spend: wallet_connect::CoinSpend) -> Result<CoinSpend> {
     })
 }
 
+#[cfg(feature = "native")]
 fn rust_coin(coin: wallet_connect::Coin) -> Result<Coin> {
     Ok(Coin {
         parent_coin_info: parse_coin_id(coin.parent_coin_info)?,

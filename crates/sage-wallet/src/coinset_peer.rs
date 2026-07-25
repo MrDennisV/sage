@@ -27,6 +27,18 @@ impl CoinsetPeer {
         Self::new(CoinsetClient::testnet11())
     }
 
+    /// Builds a client for a network id. Coinset hosts networks other than
+    /// mainnet as subdomains, following the testnet11 convention.
+    pub fn for_network(network_id: &str) -> Self {
+        match network_id {
+            "mainnet" => Self::mainnet(),
+            "testnet11" => Self::testnet11(),
+            _ => Self::new(CoinsetClient::new(format!(
+                "https://{network_id}.api.coinset.org"
+            ))),
+        }
+    }
+
     /// Returns the current peak height and header hash.
     pub async fn get_peak(&self) -> Result<(u32, Bytes32), WalletError> {
         let response = self

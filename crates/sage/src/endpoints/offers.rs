@@ -1,8 +1,6 @@
-use chia_wallet_sdk::{
-    chia::puzzle_types::nft::NftMetadata,
-    driver::{decode_offer, encode_offer},
-    prelude::*,
-};
+#[cfg(feature = "native")]
+use chia_puzzle_types::nft::NftMetadata;
+use chia_sdk_driver::{decode_offer, encode_offer};
 use itertools::Itertools;
 use sage_api::{
     Amount, CancelOffer, CancelOfferResponse, CancelOffers, CancelOffersResponse, CombineOffers,
@@ -12,20 +10,19 @@ use sage_api::{
     OfferRecord, OfferRecordStatus, OfferSummary, OptionAssets, TakeOffer, TakeOfferResponse,
     ViewOffer, ViewOfferResponse,
 };
-use sage_assets::fetch_uris_with_hash;
-use sage_database::{AssetKind, OfferRow, OfferStatus, OfferedAsset};
+use sage_database::{AssetKind, OfferRow, OfferStatus, OfferedAsset, SqlExecutor};
+use sage_wallet::portable::unix_timestamp;
+use sage_wallet::prelude::*;
 use sage_wallet::{
-    Offered, Requested, RequestedCat, SyncCommand, Transaction, Wallet, WalletError,
-    aggregate_offers, insert_transaction, sort_offer,
+    Offered, Requested, RequestedCat, Wallet, WalletError, aggregate_offers, sort_offer,
 };
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::time::timeout;
 use tracing::debug;
 
+#[cfg(feature = "native")]
+use crate::{ExtractedNftData, extract_nft_data};
 use crate::{
-    ConfirmationInfo, Error, ExtractedNftData, Result, Sage, extract_nft_data, json_bundle,
-    offer_expiration, parse_amount, parse_asset_id, parse_coin_ids, parse_hash, parse_nft_id,
-    parse_offer_id, parse_option_id,
+    ConfirmationInfo, Error, Result, Sage, json_bundle, offer_expiration, parse_amount,
+    parse_asset_id, parse_coin_ids, parse_hash, parse_nft_id, parse_offer_id, parse_option_id,
 };
 
 #[derive(Debug, Clone)]
@@ -37,7 +34,7 @@ struct AssetToOffer {
     is_requested: bool,
 }
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub async fn make_offer(&self, req: MakeOffer) -> Result<MakeOfferResponse> {
         let wallet = self.wallet()?;
 
@@ -128,7 +125,7 @@ impl Sage {
                     }
 
                     if peer.is_none() {
-                        peer = self.peer_state.lock().await.acquire_peer();
+                        peer = self.acquire_peer().await;
                     }
 
                     let Some(requested_nft) =
@@ -143,7 +140,7 @@ impl Sage {
                         return Err(Error::InvalidAmount(raw_amount.to_string()));
                     }
                     if peer.is_none() {
-                        peer = self.peer_state.lock().await.acquire_peer();
+                        peer = self.acquire_peer().await;
                     }
 
                     let Some(requested_option) = wallet
@@ -225,28 +222,7 @@ impl Sage {
         );
 
         if req.auto_submit {
-            let peer = self
-                .peer_state
-                .lock()
-                .await
-                .acquire_peer()
-                .ok_or(Error::NoPeers)?;
-
-            let subscriptions = insert_transaction(
-                &wallet.db,
-                &peer,
-                wallet.genesis_challenge,
-                spend_bundle.name(),
-                Transaction::from_coin_spends(spend_bundle.coin_spends.clone())?,
-                spend_bundle.aggregated_signature.clone(),
-            )
-            .await?;
-
-            self.command_sender
-                .send(SyncCommand::SubscribeCoins {
-                    coin_ids: subscriptions,
-                })
-                .await?;
+            self.submit(spend_bundle.clone()).await?;
         }
 
         let json_bundle = json_bundle(&spend_bundle);
@@ -316,36 +292,10 @@ impl Sage {
             });
         }
 
-        let testnet = self.network().genesis_challenge == TESTNET11_CONSTANTS.genesis_challenge;
-
         for nft in offer.offered_coins().nfts.values() {
-            let _info = if let Ok(metadata) = ctx.extract::<NftMetadata>(nft.info.metadata.ptr()) {
-                let mut confirmation_info = ConfirmationInfo::default();
-
-                if let Some(hash) = metadata.data_hash
-                    && let Ok(Some(data)) = timeout(
-                        Duration::from_secs(10),
-                        fetch_uris_with_hash(metadata.data_uris.clone(), hash, testnet),
-                    )
-                    .await
-                {
-                    confirmation_info.nft_data.insert(hash, data);
-                }
-
-                if let Some(hash) = metadata.metadata_hash
-                    && let Ok(Some(data)) = timeout(
-                        Duration::from_secs(10),
-                        fetch_uris_with_hash(metadata.metadata_uris.clone(), hash, testnet),
-                    )
-                    .await
-                {
-                    confirmation_info.nft_data.insert(hash, data);
-                }
-
-                extract_nft_data(Some(&wallet.db), Some(metadata), &confirmation_info).await?
-            } else {
-                ExtractedNftData::default()
-            };
+            #[cfg(feature = "native")]
+            self.prefetch_offer_nft_data(&ctx, nft.info.metadata.ptr())
+                .await?;
 
             nft_rows.push(AssetToOffer {
                 offer_id,
@@ -401,33 +351,9 @@ impl Sage {
             )
             .await?;
 
-            let _info = if let Ok(metadata) = ctx.extract::<NftMetadata>(nft.metadata.ptr()) {
-                let mut confirmation_info = ConfirmationInfo::default();
-
-                if let Some(hash) = metadata.data_hash
-                    && let Ok(Some(data)) = timeout(
-                        Duration::from_secs(10),
-                        fetch_uris_with_hash(metadata.data_uris.clone(), hash, testnet),
-                    )
-                    .await
-                {
-                    confirmation_info.nft_data.insert(hash, data);
-                }
-
-                if let Some(hash) = metadata.metadata_hash
-                    && let Ok(Some(data)) = timeout(
-                        Duration::from_secs(10),
-                        fetch_uris_with_hash(metadata.metadata_uris.clone(), hash, testnet),
-                    )
-                    .await
-                {
-                    confirmation_info.nft_data.insert(hash, data);
-                }
-
-                extract_nft_data(Some(&wallet.db), Some(metadata), &confirmation_info).await?
-            } else {
-                ExtractedNftData::default()
-            };
+            #[cfg(feature = "native")]
+            self.prefetch_offer_nft_data(&ctx, nft.metadata.ptr())
+                .await?;
 
             nft_rows.push(AssetToOffer {
                 offer_id,
@@ -452,10 +378,7 @@ impl Sage {
 
         let mut tx = wallet.db.tx().await?;
 
-        let inserted_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time is before the UNIX epoch")
-            .as_secs();
+        let inserted_timestamp = unix_timestamp();
 
         tx.insert_offer(OfferRow {
             offer_id,
@@ -614,7 +537,7 @@ impl Sage {
         Ok(DeleteOfferResponse {})
     }
 
-    async fn offer_record(&self, wallet: &Wallet, offer: OfferRow) -> Result<OfferRecord> {
+    async fn offer_record(&self, wallet: &Wallet<E>, offer: OfferRow) -> Result<OfferRecord> {
         let assets = wallet.db.offer_assets(offer.offer_id).await?;
 
         let mut maker = Vec::new();
@@ -736,5 +659,29 @@ impl Sage {
         }
 
         self.transact(coin_spends, req.auto_submit).await
+    }
+}
+
+// Off-chain NFT data behind an offer can only be downloaded natively.
+#[cfg(feature = "native")]
+impl<E: SqlExecutor> Sage<E> {
+    /// Warms the local caches for an NFT referenced by an offer being
+    /// imported, so its data and metadata are available afterwards.
+    async fn prefetch_offer_nft_data(
+        &self,
+        ctx: &SpendContext,
+        metadata: NodePtr,
+    ) -> Result<ExtractedNftData> {
+        let wallet = self.wallet()?;
+
+        let Ok(metadata) = ctx.extract::<NftMetadata>(metadata) else {
+            return Ok(ExtractedNftData::default());
+        };
+
+        let mut confirmation_info = ConfirmationInfo::default();
+
+        self.fetch_nft_data(&metadata, &mut confirmation_info).await;
+
+        extract_nft_data(Some(&wallet.db), Some(metadata), &confirmation_info).await
     }
 }

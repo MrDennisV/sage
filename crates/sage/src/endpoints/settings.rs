@@ -1,19 +1,73 @@
+#[cfg(feature = "native")]
 use std::time::Duration;
 
+#[cfg(feature = "native")]
 use itertools::Itertools;
 use sage_api::{
-    AddPeer, AddPeerResponse, GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse,
-    GetPeers, GetPeersResponse, NetworkKind, PeerRecord, RemovePeer, RemovePeerResponse,
-    SetChangeAddress, SetChangeAddressResponse, SetDeltaSync, SetDeltaSyncOverride,
-    SetDeltaSyncOverrideResponse, SetDeltaSyncResponse, SetDiscoverPeers, SetDiscoverPeersResponse,
-    SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse, SetNetworkResponse, SetTargetPeers,
-    SetTargetPeersResponse,
+    GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse, NetworkKind, SetDeltaSync,
+    SetDeltaSyncOverride, SetDeltaSyncOverrideResponse, SetDeltaSyncResponse,
+};
+#[cfg(feature = "native")]
+use sage_api::{
+    AddPeer, AddPeerResponse, GetPeers, GetPeersResponse, PeerRecord, RemovePeer,
+    RemovePeerResponse, SetChangeAddress, SetChangeAddressResponse, SetDiscoverPeers,
+    SetDiscoverPeersResponse, SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse,
+    SetNetworkResponse, SetTargetPeers, SetTargetPeersResponse,
 };
 use sage_config::{MAINNET, TESTNET11};
+use sage_database::SqlExecutor;
+#[cfg(feature = "native")]
 use sage_wallet::SyncCommand;
 
 use crate::{Error, Result, Sage};
 
+impl<E: SqlExecutor> Sage<E> {
+    pub fn get_networks(&mut self, _req: GetNetworks) -> Result<GetNetworksResponse> {
+        Ok(self.network_list.clone())
+    }
+
+    pub fn get_network(&mut self, _req: GetNetwork) -> Result<GetNetworkResponse> {
+        let network = self.network();
+
+        Ok(GetNetworkResponse {
+            network: network.clone(),
+            kind: if network.genesis_challenge == MAINNET.genesis_challenge {
+                NetworkKind::Mainnet
+            } else if network.genesis_challenge == TESTNET11.genesis_challenge {
+                NetworkKind::Testnet
+            } else {
+                NetworkKind::Unknown
+            },
+        })
+    }
+
+    pub fn set_delta_sync(&mut self, req: SetDeltaSync) -> Result<SetDeltaSyncResponse> {
+        self.wallet_config.defaults.delta_sync = req.delta_sync;
+        self.save_config()?;
+        Ok(SetDeltaSyncResponse {})
+    }
+
+    pub fn set_delta_sync_override(
+        &mut self,
+        req: SetDeltaSyncOverride,
+    ) -> Result<SetDeltaSyncOverrideResponse> {
+        let Some(wallet_config) = self
+            .wallet_config
+            .wallets
+            .iter_mut()
+            .find(|w| w.fingerprint == req.fingerprint)
+        else {
+            return Err(Error::UnknownFingerprint);
+        };
+        wallet_config.delta_sync = req.delta_sync;
+        self.save_config()?;
+        Ok(SetDeltaSyncOverrideResponse {})
+    }
+}
+
+// Peer management and anything that reopens the wallet database belongs to the
+// native sync manager.
+#[cfg(feature = "native")]
 impl Sage {
     pub async fn get_peers(&self, _req: GetPeers) -> Result<GetPeersResponse> {
         let peer_state = self.peer_state.lock().await;
@@ -115,48 +169,6 @@ impl Sage {
         self.setup_peers().await?;
 
         Ok(SetNetworkOverrideResponse {})
-    }
-
-    pub fn get_networks(&mut self, _req: GetNetworks) -> Result<GetNetworksResponse> {
-        Ok(self.network_list.clone())
-    }
-
-    pub fn get_network(&mut self, _req: GetNetwork) -> Result<GetNetworkResponse> {
-        let network = self.network();
-
-        Ok(GetNetworkResponse {
-            network: network.clone(),
-            kind: if network.genesis_challenge == MAINNET.genesis_challenge {
-                NetworkKind::Mainnet
-            } else if network.genesis_challenge == TESTNET11.genesis_challenge {
-                NetworkKind::Testnet
-            } else {
-                NetworkKind::Unknown
-            },
-        })
-    }
-
-    pub fn set_delta_sync(&mut self, req: SetDeltaSync) -> Result<SetDeltaSyncResponse> {
-        self.wallet_config.defaults.delta_sync = req.delta_sync;
-        self.save_config()?;
-        Ok(SetDeltaSyncResponse {})
-    }
-
-    pub fn set_delta_sync_override(
-        &mut self,
-        req: SetDeltaSyncOverride,
-    ) -> Result<SetDeltaSyncOverrideResponse> {
-        let Some(wallet_config) = self
-            .wallet_config
-            .wallets
-            .iter_mut()
-            .find(|w| w.fingerprint == req.fingerprint)
-        else {
-            return Err(Error::UnknownFingerprint);
-        };
-        wallet_config.delta_sync = req.delta_sync;
-        self.save_config()?;
-        Ok(SetDeltaSyncOverrideResponse {})
     }
 
     pub async fn set_change_address(

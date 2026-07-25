@@ -12,7 +12,7 @@ use sage_api::XCH;
 use sage_config::{
     Config, NetworkList, OldConfig, OldNetwork, WalletConfig, migrate_config, migrate_networks,
 };
-use sage_database::Database;
+use sage_database::{Database, SqlExecutor};
 use sage_keychain::Keychain;
 use sage_wallet::{PeerState, SyncCommand, SyncEvent, SyncManager, SyncOptions, Timeouts};
 use sqlx::{
@@ -410,6 +410,9 @@ impl Sage {
         Ok(pool)
     }
 
+}
+
+impl<E: SqlExecutor> Sage<E> {
     pub fn wallet_db_path(&self, fingerprint: u32) -> Result<PathBuf> {
         let path = self.path.join("wallets").join(fingerprint.to_string());
         fs::create_dir_all(&path)?;
@@ -427,5 +430,13 @@ impl Sage {
             .unwrap_or_else(|| self.network_id());
         let path = path.join(format!("{network_id}.sqlite"));
         Ok(path)
+    }
+
+    /// The size of the wallet database file, reported in the sync status.
+    pub(crate) fn database_size(&self, fingerprint: u32) -> u64 {
+        self.wallet_db_path(fingerprint)
+            .ok()
+            .and_then(|path| path.metadata().ok())
+            .map_or(0, |metadata| metadata.len())
     }
 }

@@ -1,53 +1,25 @@
-use chia_wallet_sdk::{
-    chia::{
-        bls::master_to_wallet_hardened_intermediate,
-        puzzle_types::{DeriveSynthetic, nft::NftMetadata, standard::StandardArgs},
-    },
-    prelude::*,
-};
+use chia_bls::master_to_wallet_hardened_intermediate;
+use chia_puzzle_types::{DeriveSynthetic, nft::NftMetadata, standard::StandardArgs};
 use sage_api::{
     IncreaseDerivationIndex, IncreaseDerivationIndexResponse, RedownloadNft, RedownloadNftResponse,
-    ResyncCat, ResyncCatResponse, UpdateCat, UpdateCatResponse, UpdateDid, UpdateDidResponse,
-    UpdateNft, UpdateNftCollection, UpdateNftCollectionResponse, UpdateNftResponse, UpdateOption,
-    UpdateOptionResponse,
+    UpdateCat, UpdateCatResponse, UpdateDid, UpdateDidResponse, UpdateNft, UpdateNftCollection,
+    UpdateNftCollectionResponse, UpdateNftResponse, UpdateOption, UpdateOptionResponse,
 };
+#[cfg(feature = "native")]
+use sage_api::{ResyncCat, ResyncCatResponse};
+#[cfg(feature = "native")]
 use sage_assets::DexieCat;
-use sage_database::{Asset, AssetKind, Derivation};
-use sage_wallet::SyncCommand;
+#[cfg(feature = "native")]
+use sage_database::{Asset, AssetKind};
+use sage_database::{Derivation, SqlExecutor};
+use sage_wallet::prelude::*;
 
 use crate::{
     Error, Result, Sage, parse_asset_id, parse_collection_id, parse_did_id, parse_nft_id,
     parse_option_id,
 };
 
-impl Sage {
-    pub async fn resync_cat(&self, req: ResyncCat) -> Result<ResyncCatResponse> {
-        let wallet = self.wallet()?;
-
-        let asset_id = parse_asset_id(req.asset_id)?;
-        let testnet = self.network().genesis_challenge == TESTNET11_CONSTANTS.genesis_challenge;
-
-        let cat = DexieCat::fetch(asset_id, testnet).await?;
-
-        wallet
-            .db
-            .update_asset(Asset {
-                hash: asset_id,
-                name: cat.name,
-                ticker: cat.ticker,
-                precision: 3,
-                icon_url: cat.icon_url,
-                description: cat.description,
-                is_sensitive_content: false,
-                is_visible: true,
-                hidden_puzzle_hash: cat.hidden_puzzle_hash,
-                kind: AssetKind::Token,
-            })
-            .await?;
-
-        Ok(ResyncCatResponse {})
-    }
-
+impl<E: SqlExecutor> Sage<E> {
     pub async fn update_cat(&self, req: UpdateCat) -> Result<UpdateCatResponse> {
         let wallet = self.wallet()?;
 
@@ -246,12 +218,39 @@ impl Sage {
             tx.commit().await?;
         }
 
-        self.command_sender
-            .send(SyncCommand::SubscribePuzzles {
-                puzzle_hashes: derivations,
+        self.subscribe_puzzles(derivations).await?;
+
+        Ok(IncreaseDerivationIndexResponse {})
+    }
+}
+
+// Token metadata is fetched from Dexie, which needs a native HTTP client.
+#[cfg(feature = "native")]
+impl<E: SqlExecutor> Sage<E> {
+    pub async fn resync_cat(&self, req: ResyncCat) -> Result<ResyncCatResponse> {
+        let wallet = self.wallet()?;
+
+        let asset_id = parse_asset_id(req.asset_id)?;
+        let testnet = self.network().genesis_challenge == TESTNET11_CONSTANTS.genesis_challenge;
+
+        let cat = DexieCat::fetch(asset_id, testnet).await?;
+
+        wallet
+            .db
+            .update_asset(Asset {
+                hash: asset_id,
+                name: cat.name,
+                ticker: cat.ticker,
+                precision: 3,
+                icon_url: cat.icon_url,
+                description: cat.description,
+                is_sensitive_content: false,
+                is_visible: true,
+                hidden_puzzle_hash: cat.hidden_puzzle_hash,
+                kind: AssetKind::Token,
             })
             .await?;
 
-        Ok(IncreaseDerivationIndexResponse {})
+        Ok(ResyncCatResponse {})
     }
 }

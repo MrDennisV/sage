@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::PathBuf};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use sage::Sage;
 use sage_database::Database;
@@ -8,14 +8,28 @@ use wasm_bindgen::prelude::*;
 
 use crate::{BrowserExecutor, BrowserStore, js_error};
 
+/// The one Sage instance for this wasm module.
+pub(crate) type SageCell = Rc<RefCell<Option<Sage<BrowserExecutor>>>>;
+
 thread_local! {
-    /// The single Sage instance for this wasm module. Exported async fns must
-    /// never hold a borrow across an await; clone what they need out first.
-    pub(crate) static SAGE: RefCell<Option<Sage<BrowserExecutor>>> = const { RefCell::new(None) };
+    static SAGE: SageCell = Rc::new(RefCell::new(None));
+}
+
+/// A handle to the Sage instance. It is handed out as an `Rc` so async
+/// exports can keep the borrow alive across a suspension point, which
+/// endpoints that talk to the network need.
+pub(crate) fn sage_cell() -> SageCell {
+    SAGE.with(Rc::clone)
 }
 
 pub(crate) fn not_initialized() -> JsValue {
     JsValue::from_str("sage is not initialized; call sage_init first")
+}
+
+/// The module is single threaded, so the only way the instance is already
+/// borrowed is a command arriving while another one is suspended.
+pub(crate) fn already_busy() -> JsValue {
+    JsValue::from_str("sage is already handling a command; retry once it finishes")
 }
 
 /// Creates the Sage instance over the browser bridges, loading the keychain
@@ -23,12 +37,12 @@ pub(crate) fn not_initialized() -> JsValue {
 /// (or default) network. The database is selected separately, since each
 /// wallet and network pair has its own database.
 #[wasm_bindgen]
-pub async fn sage_init(network_id: String) -> Result<(), JsValue> {
+pub fn sage_init(network_id: &str) -> Result<(), JsValue> {
     let mut sage = Sage::with_store(Box::new(BrowserStore), PathBuf::new());
 
-    load_stored_state(&mut sage, &network_id).map_err(js_error)?;
+    load_stored_state(&mut sage, network_id).map_err(js_error)?;
 
-    SAGE.with(|cell| cell.replace(Some(sage)));
+    sage_cell().replace(Some(sage));
 
     Ok(())
 }
@@ -43,16 +57,15 @@ pub struct Session {
 
 #[wasm_bindgen]
 pub fn sage_session() -> Result<String, JsValue> {
-    SAGE.with(|cell| {
-        let guard = cell.borrow();
-        let sage = guard.as_ref().ok_or_else(not_initialized)?;
+    let cell = sage_cell();
+    let guard = cell.borrow();
+    let sage = guard.as_ref().ok_or_else(not_initialized)?;
 
-        serde_json::to_string(&Session {
-            fingerprint: sage.config.global.fingerprint,
-            network_id: sage.network_id(),
-        })
-        .map_err(js_error)
+    serde_json::to_string(&Session {
+        fingerprint: sage.config.global.fingerprint,
+        network_id: sage.network_id(),
     })
+    .map_err(js_error)
 }
 
 /// Applies the schema migrations to the currently selected database. The
@@ -68,9 +81,11 @@ pub async fn sage_prepare_database() -> Result<(), JsValue> {
 /// database. Runs the same data migrations native performs on wallet switch.
 #[wasm_bindgen]
 pub async fn sage_login(fingerprint: u32) -> Result<(), JsValue> {
-    // Clone the ticker out before awaiting; a RefCell borrow must not be
-    // held across a suspension point.
-    let ticker = SAGE.with(|cell| {
+    let cell = sage_cell();
+
+    // Release the borrow before awaiting so a command arriving in the
+    // meantime isn't rejected as busy.
+    let ticker = {
         let guard = cell.borrow();
         let sage = guard.as_ref().ok_or_else(not_initialized)?;
 
@@ -78,24 +93,22 @@ pub async fn sage_login(fingerprint: u32) -> Result<(), JsValue> {
             return Err(js_error(sage::Error::UnknownFingerprint));
         }
 
-        Ok(sage.network().ticker.clone())
-    })?;
+        sage.network().ticker.clone()
+    };
 
     Database::from_executor(BrowserExecutor)
         .run_rust_migrations(ticker)
         .await
         .map_err(js_error)?;
 
-    SAGE.with(|cell| {
-        let mut guard = cell.borrow_mut();
-        let sage = guard.as_mut().ok_or_else(not_initialized)?;
+    let mut guard = cell.borrow_mut();
+    let sage = guard.as_mut().ok_or_else(not_initialized)?;
 
-        sage.config.global.fingerprint = Some(fingerprint);
-        sage.save_config().map_err(js_error)?;
+    sage.config.global.fingerprint = Some(fingerprint);
+    sage.save_config().map_err(js_error)?;
 
-        sage.login_with_database(fingerprint, Database::from_executor(BrowserExecutor))
-            .map_err(js_error)
-    })
+    sage.login_with_database(fingerprint, Database::from_executor(BrowserExecutor))
+        .map_err(js_error)
 }
 
 /// Mirrors the native `setup_keys`/`setup_config`, minus the legacy config

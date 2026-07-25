@@ -37,7 +37,12 @@ const FLUSH_COMMANDS = new Set([
 
 // Commands that change which wallet or network is active, so the matching
 // database has to be selected before the next query runs.
-const SESSION_COMMANDS = new Set(['set_network', 'switch_wallet', 'import_key']);
+const SESSION_COMMANDS = new Set([
+  'set_network',
+  'set_network_override',
+  'switch_wallet',
+  'import_key',
+]);
 
 function session(): Session {
   return JSON.parse(sage_session());

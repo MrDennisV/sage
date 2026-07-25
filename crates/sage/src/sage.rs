@@ -1,21 +1,21 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{future::ready, path::PathBuf, sync::Arc};
 
 use chia_bls::master_to_wallet_unhardened_intermediate;
-use chia_protocol::Bytes32;
+use chia_protocol::{Bytes32, SpendBundle};
 use chia_sdk_signer::AggSigConstants;
 use chia_sdk_utils::Address;
 use sage_api::Unit;
 use sage_config::{Config, Network, NetworkList, WalletConfig};
 use sage_database::{Database, SqlExecutor};
 use sage_keychain::Keychain;
-use sage_wallet::Wallet;
+use sage_wallet::{PeerApi, Wallet};
 
 use crate::{Error, KvStore, Result};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "native")] {
         use sage_database::SqlxExecutor;
-        use sage_wallet::{PeerState, SyncCommand};
+        use sage_wallet::{PeerState, SyncCommand, WalletPeer};
         use tokio::sync::{Mutex, mpsc};
 
         #[derive(Debug)]
@@ -33,6 +33,8 @@ cfg_if::cfg_if! {
             pub test: bool,
         }
     } else {
+        use sage_wallet::CoinsetPeer;
+
         #[derive(Debug)]
         pub struct Sage<E: SqlExecutor> {
             pub path: PathBuf,
@@ -44,6 +46,109 @@ cfg_if::cfg_if! {
             pub wallet: Option<Arc<Wallet<E>>>,
             pub unit: Unit,
             pub test: bool,
+        }
+    }
+}
+
+// The peer seam. Endpoints reach the network through these methods so their
+// bodies are identical on both targets: natively a peer is borrowed from the
+// connection pool, while in the browser every call goes to the Coinset HTTP
+// API and there is nothing to pool.
+cfg_if::cfg_if! {
+    if #[cfg(feature = "native")] {
+        impl<E: SqlExecutor> Sage<E> {
+            /// A connected peer, if there are any.
+            pub(crate) async fn acquire_peer(&self) -> Option<WalletPeer> {
+                self.peer_state.lock().await.acquire_peer()
+            }
+
+            /// The peak height the connected peers agree on, if it is known.
+            pub(crate) async fn peak_height(&self) -> Option<u32> {
+                self.peer_state.lock().await.peak().map(|(height, _)| height)
+            }
+
+            /// Registers interest in coins so the sync manager picks up their
+            /// updates as they are pushed by peers.
+            pub async fn subscribe_coins(&self, coin_ids: Vec<Bytes32>) -> Result<()> {
+                self.command_sender
+                    .send(SyncCommand::SubscribeCoins { coin_ids })
+                    .await?;
+
+                Ok(())
+            }
+
+            /// Registers interest in puzzle hashes so the sync manager picks up
+            /// their updates as they are pushed by peers.
+            pub async fn subscribe_puzzles(&self, puzzle_hashes: Vec<Bytes32>) -> Result<()> {
+                self.command_sender
+                    .send(SyncCommand::SubscribePuzzles { puzzle_hashes })
+                    .await?;
+
+                Ok(())
+            }
+
+        }
+
+        /// Transactions are rebroadcast to every connected peer by the
+        /// transaction queue, so nothing is sent from here.
+        pub(crate) fn broadcast(
+            _peer: &impl PeerApi,
+            _spend_bundle: &SpendBundle,
+        ) -> impl Future<Output = Result<()>> {
+            ready(Ok(()))
+        }
+    } else {
+        impl<E: SqlExecutor> Sage<E> {
+            /// The Coinset API client for the active network. It is a stateless
+            /// HTTP client, so it is built on demand instead of pooled.
+            pub fn peer(&self) -> CoinsetPeer {
+                CoinsetPeer::for_network(&self.network_id())
+            }
+
+            pub(crate) fn acquire_peer(&self) -> impl Future<Output = Option<CoinsetPeer>> {
+                ready(Some(self.peer()))
+            }
+
+            pub(crate) async fn peak_height(&self) -> Option<u32> {
+                self.peer().get_peak().await.ok().map(|(height, _)| height)
+            }
+
+            /// Polling re-queries everything, so there is nothing to subscribe
+            /// to without a push channel.
+            pub fn subscribe_coins(
+                &self,
+                _coin_ids: Vec<Bytes32>,
+            ) -> impl Future<Output = Result<()>> {
+                ready(Ok(()))
+            }
+
+            pub fn subscribe_puzzles(
+                &self,
+                _puzzle_hashes: Vec<Bytes32>,
+            ) -> impl Future<Output = Result<()>> {
+                ready(Ok(()))
+            }
+
+        }
+
+        /// There is no transaction queue to rebroadcast pending transactions,
+        /// so they are pushed to the network here.
+        pub(crate) async fn broadcast(
+            peer: &impl PeerApi,
+            spend_bundle: &SpendBundle,
+        ) -> Result<()> {
+            let transaction_id = spend_bundle.name();
+            let ack = peer.send_transaction(spend_bundle.clone()).await?;
+
+            if ack.status == 1 {
+                return Ok(());
+            }
+
+            Err(Error::TransactionRejected {
+                transaction_id,
+                status: ack.status,
+                error: ack.error,
+            })
         }
     }
 }

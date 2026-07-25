@@ -1,7 +1,6 @@
 use std::{cell::RefCell, sync::Arc};
 
 use chia_protocol::Bytes32;
-use chia_sdk_coinset::CoinsetClient;
 use sage_wallet::{
     CoinsetPeer, EventSink, SyncEvent, Wallet, add_new_subscriptions, apply_synced_coins,
     fetch_puzzles, sync_wallet,
@@ -11,7 +10,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     BrowserExecutor,
-    bootstrap::{SAGE, not_initialized},
+    bootstrap::{not_initialized, sage_cell},
     js_error,
 };
 
@@ -42,23 +41,14 @@ impl EventSink for CollectorSink {
 /// sync events as a JSON array in the `sage_api::SyncEvent` wire shape.
 #[wasm_bindgen]
 pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
-    // Clone the wallet handle and network id out of the RefCell before any
-    // await; a borrow must not be held across a suspension point.
-    let (wallet, network_id) = SAGE.with(|cell| {
+    // Clone the wallet handle and peer out of the RefCell before any await, so
+    // commands arriving during the sync aren't rejected as busy.
+    let (wallet, peer) = {
+        let cell = sage_cell();
         let guard = cell.borrow();
         let sage = guard.as_ref().ok_or_else(not_initialized)?;
         let wallet = sage.wallet().map_err(js_error)?;
-        Ok::<_, JsValue>((wallet, sage.network_id()))
-    })?;
-
-    let peer = match network_id.as_str() {
-        "mainnet" => CoinsetPeer::mainnet(),
-        "testnet11" => CoinsetPeer::testnet11(),
-        // Coinset hosts other networks as subdomains, following the
-        // testnet11 convention.
-        _ => CoinsetPeer::new(CoinsetClient::new(format!(
-            "https://{network_id}.api.coinset.org"
-        ))),
+        (wallet, sage.peer())
     };
 
     let sink = CollectorSink::default();

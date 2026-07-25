@@ -1,20 +1,12 @@
-#[cfg(feature = "native")]
 use std::time::Duration;
 
 use crate::prelude::*;
-#[cfg(feature = "native")]
 use chia_puzzle_types::nft::NftMetadata;
-use sage_database::SqlExecutor;
-#[cfg(feature = "native")]
-use sage_database::{NftOfferInfo, OptionOfferInfo, SerializePrimitive};
-#[cfg(feature = "native")]
-use tokio::time::sleep;
+use sage_database::{NftOfferInfo, OptionOfferInfo, SerializePrimitive, SqlExecutor};
 
-use crate::{Wallet, WalletError};
-#[cfg(feature = "native")]
-use crate::{
-    PuzzleContext, WalletPeer, fetch_minter_hash, fetch_option, insert_nft, insert_option,
-};
+use crate::portable::sleep;
+use crate::{PeerApi, PuzzleContext, Wallet, WalletError, fetch_minter_hash, fetch_option};
+use crate::{insert_nft, insert_option};
 
 impl<E: SqlExecutor> Wallet<E> {
     pub async fn fetch_offer_cat_hidden_puzzle_hash(
@@ -27,13 +19,10 @@ impl<E: SqlExecutor> Wallet<E> {
             .await?
             .and_then(|asset| asset.hidden_puzzle_hash))
     }
-}
 
-#[cfg(feature = "native")]
-impl Wallet {
     pub async fn fetch_offer_nft_info(
         &self,
-        peer: Option<&WalletPeer>,
+        peer: Option<&impl PeerApi>,
         launcher_id: Bytes32,
     ) -> Result<Option<NftOfferInfo>, WalletError> {
         let Some(peer) = peer else {
@@ -115,7 +104,7 @@ impl Wallet {
 
     pub async fn fetch_offer_option_info(
         &self,
-        peer: Option<&WalletPeer>,
+        peer: Option<&impl PeerApi>,
         launcher_id: Bytes32,
     ) -> Result<Option<OptionOfferInfo>, WalletError> {
         let Some(peer) = peer else {

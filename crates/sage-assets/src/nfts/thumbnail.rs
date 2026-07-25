@@ -4,6 +4,8 @@ use image::{DynamicImage, ImageFormat, ImageReader};
 use thiserror::Error;
 use webp::Decoder;
 
+use super::Thumbnail;
+
 #[derive(Debug, Error)]
 pub enum ThumbnailError {
     #[error("Failed to load image: {0}")]
@@ -14,12 +16,6 @@ pub enum ThumbnailError {
 
     #[error("Failed to decode webp image")]
     Webp,
-}
-
-#[derive(Debug, Clone)]
-pub struct Thumbnail {
-    pub icon: Vec<u8>,
-    pub thumbnail: Vec<u8>,
 }
 
 pub fn thumbnail(bytes: &[u8], mime: &str) -> Result<Option<Thumbnail>, ThumbnailError> {
