@@ -35,6 +35,11 @@ export function DappRequestProvider({ children }: { children?: ReactNode }) {
       if (message?.type === 'DAPP_PENDING') {
         setRequest(message.request ?? null);
       }
+
+      // The wallet was opened to answer a request, so it goes away with it.
+      if (message?.type === 'DAPP_CLOSE') {
+        window.close();
+      }
     });
 
     return () => port.disconnect();

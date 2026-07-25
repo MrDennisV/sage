@@ -70,6 +70,10 @@ const uiWaiters = new Set<() => void>();
 
 let nextRequestId = 0;
 let approvalWindowId: number | null = null;
+
+// Whether the bridge is the reason a wallet window is on screen. A popup the
+// user opened themselves is theirs to close.
+let openedUi = false;
 let keepalive: ReturnType<typeof setInterval> | null = null;
 let runtime: WalletRuntime;
 
@@ -172,6 +176,8 @@ function waitForUi(): Promise<boolean> {
 async function openApprovalUi(): Promise<void> {
   if (uiPorts.size > 0) return;
 
+  openedUi = true;
+
   try {
     await chrome.action.openPopup();
 
@@ -191,6 +197,21 @@ async function openApprovalUi(): Promise<void> {
   });
 
   approvalWindowId = created?.id ?? null;
+}
+
+/** Closes the popup the bridge opened, once nothing is left to answer. */
+function dismissOpenedUi() {
+  if (!openedUi || pending.size > 0) return;
+
+  openedUi = false;
+
+  for (const port of uiPorts) {
+    try {
+      port.postMessage({ type: 'DAPP_CLOSE' });
+    } catch {
+      // Already gone.
+    }
+  }
 }
 
 function closeApprovalWindow() {
@@ -216,6 +237,7 @@ function settle(request: PendingRequest, error?: Error, result?: unknown) {
 
   broadcastPending();
   closeApprovalWindow();
+  dismissOpenedUi();
 }
 
 function rejectAllPending(reason: string) {
