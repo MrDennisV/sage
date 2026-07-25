@@ -209,6 +209,14 @@ async fn wallet_connect_command(
                 .await
                 .map_err(sage_error)?,
         )?,
+        // Desktop pushes to every connected peer at once; here there is one
+        // route to the chain, so the bundle goes straight to the Coinset API.
+        "send_transaction_immediately" => encode(
+            &sage
+                .send_transaction_with_peer(&sage.peer(), decode(payload)?)
+                .await
+                .map_err(sage_error)?,
+        )?,
         _ => return Ok(None),
     };
 

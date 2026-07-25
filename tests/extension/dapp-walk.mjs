@@ -254,6 +254,34 @@ try {
     JSON.stringify(refusal),
   );
 
+  // ─── sendTransaction reaches the chain ───────────────────────────
+  // A bundle with no spends is well formed and certain to be refused, so what
+  // it proves is that the wallet carried it to the node and brought the answer
+  // back: a browser build with no route to the chain could only refuse it
+  // itself. CHIP-0002 reports a rejection in the response, not as an error.
+  const pushed = await call(page, 'sendTransaction', {
+    spendBundle: {
+      coin_spends: [],
+      // The G2 point at infinity: a valid encoding, so the wallet gets past
+      // parsing and the node is the one that decides.
+      aggregated_signature: `0xc0${'0'.repeat(190)}`,
+    },
+  });
+
+  check(
+    'sendTransaction reaches the node and reports its answer',
+    pushed.ok &&
+      typeof pushed.result?.status === 'number' &&
+      pushed.result.status !== 1,
+    JSON.stringify(pushed).slice(0, 200),
+  );
+
+  check(
+    'sendTransaction is not refused as unsupported',
+    !/unsupported/i.test(JSON.stringify(pushed)),
+    JSON.stringify(pushed).slice(0, 200),
+  );
+
   // ─── A wallet change reaches the page as accountChanged ─────────
   await send('login', { fingerprint: imported.fingerprint });
   await page

@@ -22,9 +22,6 @@ const INTENTIONALLY_UNSUPPORTED = new Map([
   // which the in-memory sql.js database does not have.
   ['get_database_stats', 'SQLite file statistics'],
   ['perform_database_maintenance', 'SQLite file statistics'],
-  // Broadcasts a bundle through the peer pool rather than the wallet's own
-  // transaction path.
-  ['send_transaction_immediately', 'broadcasts through the peer pool'],
 ]);
 
 function read(path) {
