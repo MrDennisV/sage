@@ -73,7 +73,9 @@ async fn insert_block(
 }
 
 async fn latest_peak(mut conn: impl SqlAccess) -> Result<Option<(u32, Bytes32)>> {
-    let rows = conn.fetch_all(sql_file!("blocks/latest_peak.sql"), vec![]).await?;
+    let rows = conn
+        .fetch_all(sql_file!("blocks/latest_peak.sql"), vec![])
+        .await?;
 
     let Some(row) = rows.first() else {
         return Ok(None);
@@ -83,5 +85,8 @@ async fn latest_peak(mut conn: impl SqlAccess) -> Result<Option<(u32, Bytes32)>>
         return Ok(None);
     };
 
-    Ok(Some((row.i64("height")?.convert()?, header_hash.convert()?)))
+    Ok(Some((
+        row.i64("height")?.convert()?,
+        header_hash.convert()?,
+    )))
 }

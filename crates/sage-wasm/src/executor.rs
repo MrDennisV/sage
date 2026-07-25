@@ -60,11 +60,7 @@ struct JsRows {
 }
 
 fn js_error(error: &JsValue) -> DatabaseError {
-    DatabaseError::JsError(
-        error
-            .as_string()
-            .unwrap_or_else(|| format!("{error:?}")),
-    )
+    DatabaseError::JsError(error.as_string().unwrap_or_else(|| format!("{error:?}")))
 }
 
 fn encode_params(params: Vec<SqlValue>) -> Result<String> {

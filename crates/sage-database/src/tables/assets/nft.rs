@@ -393,7 +393,11 @@ async fn update_nft_metadata(
     Ok(())
 }
 
-async fn insert_nft(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
+async fn insert_nft(
+    mut conn: impl SqlAccess,
+    hash: Bytes32,
+    coin_info: &NftCoinInfo,
+) -> Result<()> {
     let edition_number: Option<i64> = coin_info
         .edition_number
         .map(TryInto::try_into)
@@ -423,7 +427,11 @@ async fn insert_nft(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &NftCoin
     Ok(())
 }
 
-async fn update_nft(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &NftCoinInfo) -> Result<()> {
+async fn update_nft(
+    mut conn: impl SqlAccess,
+    hash: Bytes32,
+    coin_info: &NftCoinInfo,
+) -> Result<()> {
     let edition_number: Option<i64> = coin_info
         .edition_number
         .map(TryInto::try_into)

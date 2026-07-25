@@ -409,7 +409,6 @@ impl Sage {
 
         Ok(pool)
     }
-
 }
 
 impl<E: SqlExecutor> Sage<E> {

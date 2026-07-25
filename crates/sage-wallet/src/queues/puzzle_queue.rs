@@ -9,9 +9,7 @@ use tokio::{
 };
 use tracing::{debug, info};
 
-use crate::{
-    PeerState, SyncCommand, SyncEvent, WalletError, apply_synced_coins, fetch_puzzles,
-};
+use crate::{PeerState, SyncCommand, SyncEvent, WalletError, apply_synced_coins, fetch_puzzles};
 
 #[derive(Debug)]
 pub struct PuzzleQueue {

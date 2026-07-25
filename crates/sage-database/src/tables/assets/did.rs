@@ -79,7 +79,11 @@ impl<E: SqlExecutor> DatabaseTx<'_, E> {
     }
 }
 
-async fn insert_did(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
+async fn insert_did(
+    mut conn: impl SqlAccess,
+    hash: Bytes32,
+    coin_info: &DidCoinInfo,
+) -> Result<()> {
     let num_verifications_required: i64 = coin_info.num_verifications_required.try_into()?;
 
     conn.execute(
@@ -96,7 +100,11 @@ async fn insert_did(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &DidCoin
     Ok(())
 }
 
-async fn update_did(mut conn: impl SqlAccess, hash: Bytes32, coin_info: &DidCoinInfo) -> Result<()> {
+async fn update_did(
+    mut conn: impl SqlAccess,
+    hash: Bytes32,
+    coin_info: &DidCoinInfo,
+) -> Result<()> {
     let num_verifications_required: i64 = coin_info.num_verifications_required.try_into()?;
 
     conn.execute(

@@ -29,7 +29,7 @@ pub use chia_sdk_utils::{Address, Bech32, parse_hex, select_coins};
 
 // Puzzle hashes (constants)
 pub use chia_puzzles::{
-    SETTLEMENT_PAYMENT_HASH, NFT_METADATA_UPDATER_DEFAULT_HASH, SINGLETON_LAUNCHER_HASH,
+    NFT_METADATA_UPDATER_DEFAULT_HASH, SETTLEMENT_PAYMENT_HASH, SINGLETON_LAUNCHER_HASH,
 };
 
 // Core chia types

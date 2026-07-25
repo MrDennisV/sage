@@ -267,7 +267,9 @@ async fn derivations(
         )
         .await?;
 
-    let total_count = rows.first().map_or(Ok(0), |row| row.i64("total")?.convert())?;
+    let total_count = rows
+        .first()
+        .map_or(Ok(0), |row| row.i64("total")?.convert())?;
 
     let derivations = rows
         .iter()
@@ -365,7 +367,11 @@ async fn insert_arbor_p2_puzzle(mut conn: impl SqlAccess, key: PublicKey) -> Res
 
     conn.execute(
         sql_file!("p2_puzzles/insert_arbor_p2_puzzle.sql"),
-        vec![p2_puzzle_hash.clone().into(), p2_puzzle_hash.into(), key.into()],
+        vec![
+            p2_puzzle_hash.clone().into(),
+            p2_puzzle_hash.into(),
+            key.into(),
+        ],
     )
     .await?;
 
@@ -391,7 +397,10 @@ async fn p2_puzzle_kind(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Re
     })
 }
 
-async fn public_key(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
+async fn public_key(
+    mut conn: impl SqlAccess,
+    p2_puzzle_hash: Bytes32,
+) -> Result<Option<PublicKey>> {
     conn.fetch_all(
         sql_file!("p2_puzzles/public_key.sql"),
         vec![p2_puzzle_hash.into()],
@@ -446,14 +455,17 @@ async fn arbor_key(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<
 }
 
 async fn derivation(mut conn: impl SqlAccess, public_key: PublicKey) -> Result<Option<Derivation>> {
-    conn.fetch_all(sql_file!("p2_puzzles/derivation.sql"), vec![public_key.into()])
-        .await?
-        .first()
-        .map(|row| {
-            Ok(Derivation {
-                derivation_index: row.i64("derivation_index")?.convert()?,
-                is_hardened: row.i64("is_hardened")? != 0,
-            })
+    conn.fetch_all(
+        sql_file!("p2_puzzles/derivation.sql"),
+        vec![public_key.into()],
+    )
+    .await?
+    .first()
+    .map(|row| {
+        Ok(Derivation {
+            derivation_index: row.i64("derivation_index")?.convert()?,
+            is_hardened: row.i64("is_hardened")? != 0,
         })
-        .transpose()
+    })
+    .transpose()
 }

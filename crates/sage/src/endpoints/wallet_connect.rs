@@ -19,12 +19,12 @@ use sage_wallet::{Status, submit_to_peers};
 #[cfg(feature = "native")]
 use tracing::{debug, info, warn};
 
-#[cfg(feature = "native")]
-use crate::{parse_coin_id, parse_hash, parse_program, parse_signature};
 use crate::{
     Error, Result, Sage, parse_asset_id, parse_did_id, parse_nft_id, parse_public_key,
     parse_signature_message,
 };
+#[cfg(feature = "native")]
+use crate::{parse_coin_id, parse_hash, parse_program, parse_signature};
 
 impl<E: SqlExecutor> Sage<E> {
     pub async fn filter_unlocked_coins(

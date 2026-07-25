@@ -4,7 +4,6 @@ use chia_sdk_coinset::{ChiaRpcClient, CoinRecord, CoinsetClient};
 
 use crate::{PeerApi, WalletError};
 
-
 /// A [`PeerApi`] implementation backed by the public Coinset HTTP API, used
 /// where the native peer protocol isn't available (such as browsers). There
 /// are no push notifications, so callers poll; `subscribe_*` methods fetch
@@ -270,11 +269,7 @@ impl PeerApi for CoinsetPeer {
 
         let status = if response.success { 1 } else { 3 };
 
-        Ok(TransactionAck::new(
-            transaction_id,
-            status,
-            response.error,
-        ))
+        Ok(TransactionAck::new(transaction_id, status, response.error))
     }
 
     async fn block_timestamp(&self, height: u32) -> Result<(Bytes32, u64), WalletError> {

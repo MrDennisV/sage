@@ -1,6 +1,6 @@
-use std::str::FromStr;
 #[cfg(feature = "native")]
 use std::fs;
+use std::str::FromStr;
 
 use bip39::Mnemonic;
 use chia_bls::{
@@ -10,15 +10,15 @@ use chia_bls::{
 use chia_puzzle_types::{DeriveSynthetic, standard::StandardArgs};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use sage_api::{
-    GenerateMnemonic, GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse,
-    GetSecretKey, GetSecretKeyResponse, ImportKey, KeyInfo, KeyKind, RenameKey, RenameKeyResponse,
-    Resync, ResyncResponse, SecretKeyInfo, SetWalletEmoji, SetWalletEmojiResponse,
-};
 #[cfg(feature = "native")]
 use sage_api::{
     DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, ImportKeyResponse, Login,
     LoginResponse, Logout, LogoutResponse,
+};
+use sage_api::{
+    GenerateMnemonic, GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse,
+    GetSecretKey, GetSecretKeyResponse, ImportKey, KeyInfo, KeyKind, RenameKey, RenameKeyResponse,
+    Resync, ResyncResponse, SecretKeyInfo, SetWalletEmoji, SetWalletEmojiResponse,
 };
 use sage_config::Wallet;
 use sage_database::{Database, Derivation, ResyncRecords, SqlExecutor};

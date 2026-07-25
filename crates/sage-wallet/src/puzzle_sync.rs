@@ -133,8 +133,12 @@ pub async fn apply_synced_coins<E: SqlExecutor>(
                 "Retroactively inserting XCH coin that should have already been synced: {coin_id}"
             );
 
-            db.update_coin(coin_id, Bytes32::default(), item.coin_state.coin.puzzle_hash)
-                .await?;
+            db.update_coin(
+                coin_id,
+                Bytes32::default(),
+                item.coin_state.coin.puzzle_hash,
+            )
+            .await?;
             send_events = true;
             continue;
         };

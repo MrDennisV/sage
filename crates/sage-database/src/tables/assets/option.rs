@@ -268,17 +268,19 @@ async fn offer_option_info(
     mut conn: impl SqlAccess,
     hash: Bytes32,
 ) -> Result<Option<OptionOfferInfo>> {
-    conn.fetch_all(sql_file!("options/offer_option_info.sql"), vec![hash.into()])
-        .await?
-        .first()
-        .map(|row| {
-            Ok(OptionOfferInfo {
-                underlying_coin_hash: row.converted("underlying_coin_hash")?,
-                underlying_delegated_puzzle_hash: row
-                    .converted("underlying_delegated_puzzle_hash")?,
-            })
+    conn.fetch_all(
+        sql_file!("options/offer_option_info.sql"),
+        vec![hash.into()],
+    )
+    .await?
+    .first()
+    .map(|row| {
+        Ok(OptionOfferInfo {
+            underlying_coin_hash: row.converted("underlying_coin_hash")?,
+            underlying_delegated_puzzle_hash: row.converted("underlying_delegated_puzzle_hash")?,
         })
-        .transpose()
+    })
+    .transpose()
 }
 
 async fn owned_options(

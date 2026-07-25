@@ -18,12 +18,12 @@ use sage_wallet::{
 };
 use tracing::debug;
 
-#[cfg(feature = "native")]
-use crate::{ExtractedNftData, extract_nft_data};
 use crate::{
     ConfirmationInfo, Error, Result, Sage, json_bundle, offer_expiration, parse_amount,
     parse_asset_id, parse_coin_ids, parse_hash, parse_nft_id, parse_offer_id, parse_option_id,
 };
+#[cfg(feature = "native")]
+use crate::{ExtractedNftData, extract_nft_data};
 
 #[derive(Debug, Clone)]
 struct AssetToOffer {

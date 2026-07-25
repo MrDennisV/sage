@@ -44,5 +44,6 @@ pub(crate) fn sage_error(error: sage::Error) -> JsValue {
         reason: error.to_string(),
     };
 
-    serde_json::to_string(&payload).map_or_else(|_| js_error(error), |json| JsValue::from_str(&json))
+    serde_json::to_string(&payload)
+        .map_or_else(|_| js_error(error), |json| JsValue::from_str(&json))
 }

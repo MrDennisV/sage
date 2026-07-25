@@ -3,11 +3,11 @@ mod executor;
 mod executor_sqlx;
 #[cfg(feature = "sqlite")]
 mod maintenance;
-mod serialized_primitives;
 mod migrations;
 #[cfg(feature = "sqlite")]
 mod query_check;
 mod resync;
+mod serialized_primitives;
 mod tables;
 mod utils;
 
@@ -16,9 +16,9 @@ pub use executor::*;
 pub use executor_sqlx::*;
 #[cfg(feature = "sqlite")]
 pub use maintenance::*;
-pub use serialized_primitives::*;
 pub use migrations::*;
 pub use resync::*;
+pub use serialized_primitives::*;
 pub use tables::*;
 
 pub(crate) use utils::*;
@@ -143,8 +143,11 @@ async fn set_rust_migration_version(mut conn: impl SqlAccess, version: i64) -> R
 }
 
 async fn update_xch_ticker(mut conn: impl SqlAccess, ticker: String) -> Result<()> {
-    conn.execute(sql_file!("assets/update_xch_ticker.sql"), vec![ticker.into()])
-        .await?;
+    conn.execute(
+        sql_file!("assets/update_xch_ticker.sql"),
+        vec![ticker.into()],
+    )
+    .await?;
 
     Ok(())
 }

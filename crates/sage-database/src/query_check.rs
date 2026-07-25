@@ -221,7 +221,13 @@ fn insert_height() {
 
 fn insert_block() {
     let header_hash = hash();
-    let _ = sqlx::query_file!("queries/blocks/insert_block.sql", 0i64, 0i64, header_hash, true);
+    let _ = sqlx::query_file!(
+        "queries/blocks/insert_block.sql",
+        0i64,
+        0i64,
+        header_hash,
+        true
+    );
 }
 
 fn latest_peak() {
@@ -499,7 +505,10 @@ fn rust_migration_version() {
 }
 
 fn set_rust_migration_version() {
-    let _ = sqlx::query_file!("queries/rust_migrations/set_rust_migration_version.sql", 0i64);
+    let _ = sqlx::query_file!(
+        "queries/rust_migrations/set_rust_migration_version.sql",
+        0i64
+    );
 }
 
 fn insert_clawback_p2_puzzle() {
@@ -636,7 +645,12 @@ fn full_file_data() {
 }
 
 fn candidates_for_download() {
-    let _ = sqlx::query_file!("queries/files/candidates_for_download.sql", 0i64, 0i64, 0i64);
+    let _ = sqlx::query_file!(
+        "queries/files/candidates_for_download.sql",
+        0i64,
+        0i64,
+        0i64
+    );
 }
 
 fn update_failed_uri() {
@@ -731,7 +745,11 @@ fn insert_offer_asset() {
 fn insert_offered_coin() {
     let offer_hash = hash();
     let coin_hash = hash();
-    let _ = sqlx::query_file!("queries/offers/insert_offered_coin.sql", offer_hash, coin_hash);
+    let _ = sqlx::query_file!(
+        "queries/offers/insert_offered_coin.sql",
+        offer_hash,
+        coin_hash
+    );
 }
 
 fn offer() {

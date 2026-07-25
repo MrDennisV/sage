@@ -2,12 +2,12 @@ mod child_kind;
 mod coin_kind;
 #[cfg(feature = "coinset")]
 mod coinset_peer;
-pub mod prelude;
 mod database;
 mod error;
 mod offchain_metadata;
 mod peer_api;
 pub mod portable;
+pub mod prelude;
 mod puzzle_context;
 mod puzzle_sync;
 #[cfg(feature = "native")]
@@ -16,12 +16,12 @@ mod sync_event;
 #[cfg(feature = "native")]
 mod sync_manager;
 mod transaction;
-mod wallet_sync;
 #[cfg(feature = "native")]
 mod utils;
 mod wallet;
 #[cfg(feature = "native")]
 mod wallet_peer;
+mod wallet_sync;
 
 pub use child_kind::*;
 pub use coin_kind::*;
@@ -39,12 +39,12 @@ pub use sync_event::*;
 #[cfg(feature = "native")]
 pub use sync_manager::*;
 pub use transaction::*;
-pub use wallet_sync::*;
 #[cfg(feature = "native")]
 pub use utils::*;
 pub use wallet::*;
 #[cfg(feature = "native")]
 pub use wallet_peer::*;
+pub use wallet_sync::*;
 
 #[cfg(test)]
 mod test;
