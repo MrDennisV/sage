@@ -45,7 +45,7 @@ impl CoinsetPeer {
             .client
             .get_blockchain_state()
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_blockchain_state"))?;
 
         let state = response
             .blockchain_state
@@ -55,8 +55,22 @@ impl CoinsetPeer {
     }
 }
 
-fn coinset_error(error: impl std::fmt::Display) -> WalletError {
-    WalletError::Coinset(error.to_string())
+/// Names the request in the error, since the underlying client reports
+/// transport failures without saying which call produced them.
+fn coinset_error<E: std::error::Error>(request: &str) -> impl Fn(E) -> WalletError + '_ {
+    move |error| {
+        // The client reports transport failures without naming the request or
+        // the underlying cause, so include both.
+        let mut message = format!("{request}: {error}");
+        let mut source = error.source();
+
+        while let Some(cause) = source {
+            message.push_str(&format!(" -> {cause}"));
+            source = cause.source();
+        }
+
+        WalletError::Coinset(message)
+    }
 }
 
 fn to_coin_state(record: &CoinRecord) -> CoinState {
@@ -82,7 +96,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .get_coin_records_by_names(coin_ids, previous_height, None, Some(true))
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_coin_records_by_names"))?;
 
         Ok(response
             .coin_records
@@ -108,7 +122,7 @@ impl PeerApi for CoinsetPeer {
                 Some(filters.include_spent),
             )
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_coin_records_by_puzzle_hashes"))?;
 
         let coin_states = response
             .coin_records
@@ -157,7 +171,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .get_coin_records_by_names(coin_ids, None, None, Some(true))
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_coin_records_by_names"))?;
 
         Ok(response
             .coin_records
@@ -176,7 +190,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .get_coin_record_by_name(coin_id)
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_coin_record_by_name"))?;
 
         Ok(response.coin_record.as_ref().map(to_coin_state))
     }
@@ -209,7 +223,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .get_puzzle_and_solution(coin_id, Some(spent_height))
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_puzzle_and_solution"))?;
 
         let coin_spend = response
             .coin_solution
@@ -237,7 +251,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .get_coin_records_by_parent_ids(vec![coin_id], None, None, Some(true))
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_coin_records_by_parent_ids"))?;
 
         Ok(response
             .coin_records
@@ -257,7 +271,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .push_tx(spend_bundle)
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("push_tx"))?;
 
         let status = if response.success { 1 } else { 3 };
 
@@ -273,7 +287,7 @@ impl PeerApi for CoinsetPeer {
             .client
             .get_block_record_by_height(height)
             .await
-            .map_err(coinset_error)?;
+            .map_err(coinset_error("get_block_record_by_height"))?;
 
         let block = response.block_record.ok_or(WalletError::PeerMisbehaved)?;
 

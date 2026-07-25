@@ -114,7 +114,7 @@ msgstr "{pageSize} elementos por página"
 #~ msgid "{peerCount, plural, one {# peer} other {# peers}}"
 #~ msgstr "{peerCount, plural, one {# nodo} other {# nodos}}"
 
-#: src/components/Nav.tsx:162
+#: src/components/Nav.tsx:165
 msgid "{peerCount} peers synced"
 msgstr "{peerCount} nodos sincronizados"
 
@@ -166,7 +166,7 @@ msgstr "{selectedCount} seleccionados"
 msgid "1 combined coin"
 msgstr "1 moneda combinada"
 
-#: src/pages/Settings.tsx:426
+#: src/pages/Settings.tsx:430
 msgid "A more lightweight sync that only checks unseen blocks"
 msgstr ""
 
@@ -327,7 +327,7 @@ msgstr "Dirección para verificar"
 msgid "Addresses"
 msgstr "Direcciones"
 
-#: src/pages/Settings.tsx:156
+#: src/pages/Settings.tsx:157
 msgid "Advanced"
 msgstr "Avanzado"
 
@@ -343,7 +343,7 @@ msgstr "Opciones avanzadas"
 msgid "All Addresses"
 msgstr "Todas las direcciones"
 
-#: src/pages/Settings.tsx:841
+#: src/pages/Settings.tsx:849
 msgid "All Levels"
 msgstr ""
 
@@ -368,7 +368,7 @@ msgstr "Cantidad copiada al portapapeles"
 msgid "Amount includes"
 msgstr "Cantidad incluye"
 
-#: src/pages/Settings.tsx:1561
+#: src/pages/Settings.tsx:1569
 msgid "Analyze Duration"
 msgstr ""
 
@@ -480,7 +480,7 @@ msgstr ""
 msgid "Auto-discovered peer"
 msgstr "Nodo descubierto automáticamente"
 
-#: src/pages/Settings.tsx:612
+#: src/pages/Settings.tsx:618
 msgid "Automatically discover and connect to peers"
 msgstr "Descubrir y conectarse automáticamente a nodos"
 
@@ -488,7 +488,7 @@ msgstr "Descubrir y conectarse automáticamente a nodos"
 #~ msgid "Automatically generate new addresses as needed"
 #~ msgstr "Generar automáticamente nuevas direcciones según sea necesario"
 
-#: src/pages/Settings.tsx:1012
+#: src/pages/Settings.tsx:1020
 msgid "Automatically start the RPC server when the app launches"
 msgstr "Iniciar automáticamente el servidor RPC cuando se inicia la aplicación"
 
@@ -519,7 +519,7 @@ msgstr "Saldo copiado al portapapeles"
 msgid "Banner for {collectionName}"
 msgstr "Banner para {collectionName}"
 
-#: src/pages/Settings.tsx:307
+#: src/pages/Settings.tsx:311
 msgid "Biometric Authentication"
 msgstr ""
 
@@ -642,7 +642,7 @@ msgstr "Al deshabilitar esto, estás creando una billetera fría, sin capacidad 
 #: src/pages/PeerList.tsx:431
 #: src/pages/PeerList.tsx:487
 #: src/pages/PeerList.tsx:677
-#: src/pages/Settings.tsx:1501
+#: src/pages/Settings.tsx:1509
 msgid "Cancel"
 msgstr "Cancelar"
 
@@ -676,7 +676,7 @@ msgstr "¿Cancelar oferta?"
 msgid "Cancelled"
 msgstr "Cancelado"
 
-#: src/pages/Settings.tsx:1149
+#: src/pages/Settings.tsx:1157
 msgid "Cannot send change to external address. Setting not updated."
 msgstr ""
 
@@ -699,7 +699,7 @@ msgstr ""
 msgid "Change"
 msgstr "Cambiar"
 
-#: src/pages/Settings.tsx:1283
+#: src/pages/Settings.tsx:1291
 msgid "Change Address"
 msgstr ""
 
@@ -729,15 +729,15 @@ msgstr ""
 msgid "Choose an emoji to easily identify your wallet"
 msgstr ""
 
-#: src/pages/Settings.tsx:572
+#: src/pages/Settings.tsx:576
 msgid "Choose the network to connect to"
 msgstr "Selecciona la red a la que deseas conectarte"
 
-#: src/pages/Settings.tsx:320
+#: src/pages/Settings.tsx:324
 msgid "Choose your preferred language"
 msgstr "Elige tu idioma preferido"
 
-#: src/pages/Settings.tsx:288
+#: src/pages/Settings.tsx:292
 msgid "Choose your preferred theme"
 msgstr ""
 
@@ -793,7 +793,7 @@ msgstr "Limpiar selección"
 msgid "Click here to go to offer."
 msgstr "Haz clic aquí para ir a la oferta."
 
-#: src/pages/Settings.tsx:1596
+#: src/pages/Settings.tsx:1604
 msgid "Close"
 msgstr ""
 
@@ -928,11 +928,11 @@ msgstr "Detalles de combinación"
 msgid "Combined Swap"
 msgstr ""
 
-#: src/pages/Settings.tsx:1403
+#: src/pages/Settings.tsx:1411
 msgid "Compactable Pages"
 msgstr ""
 
-#: src/pages/Settings.tsx:1386
+#: src/pages/Settings.tsx:1394
 msgid "Compactable Space"
 msgstr ""
 
@@ -978,15 +978,15 @@ msgid "Confirmed"
 msgstr "Confirmado"
 
 #: src/pages/PeerList.tsx:512
-#: src/pages/Settings.tsx:532
+#: src/pages/Settings.tsx:536
 msgid "Connect"
 msgstr "Conectar"
 
-#: src/pages/Settings.tsx:184
+#: src/pages/Settings.tsx:186
 msgid "Connect a wallet to manage its settings"
 msgstr "Conectar una billetera para gestionar sus ajustes"
 
-#: src/pages/Settings.tsx:188
+#: src/pages/Settings.tsx:190
 msgid "Connect Wallet"
 msgstr "Conectar billetera"
 
@@ -998,12 +998,12 @@ msgstr "Conectar billetera"
 msgid "Connected to {totalPeersCount} peers"
 msgstr "Conectado a {totalPeersCount} nodos"
 
-#: src/components/Nav.tsx:184
+#: src/components/Nav.tsx:192
 msgid "connecting..."
 msgstr "conectando..."
 
-#: src/components/Nav.tsx:164
-#: src/pages/Settings.tsx:530
+#: src/components/Nav.tsx:167
+#: src/pages/Settings.tsx:534
 msgid "Connecting..."
 msgstr "Conectando..."
 
@@ -1175,7 +1175,7 @@ msgstr ""
 msgid "Currency Symbol"
 msgstr "Símbolo de moneda"
 
-#: src/pages/Settings.tsx:1337
+#: src/pages/Settings.tsx:1345
 msgid "Current database statistics and health information"
 msgstr ""
 
@@ -1223,7 +1223,7 @@ msgstr "URI de datos"
 msgid "Data URLs"
 msgstr "URLs de datos"
 
-#: src/pages/Settings.tsx:1534
+#: src/pages/Settings.tsx:1542
 msgid "Database Maintenance Complete"
 msgstr ""
 
@@ -1231,39 +1231,39 @@ msgstr ""
 msgid "Database Migration Required"
 msgstr ""
 
-#: src/pages/Settings.tsx:1537
+#: src/pages/Settings.tsx:1545
 msgid "Database optimization has completed successfully."
 msgstr ""
 
-#: src/pages/Settings.tsx:1378
+#: src/pages/Settings.tsx:1386
 msgid "Database Size"
 msgstr ""
 
-#: src/pages/Settings.tsx:1336
+#: src/pages/Settings.tsx:1344
 msgid "Database Stats"
 msgstr ""
 
 #: src/pages/MakeOffer.tsx:244
 #: src/pages/MintOption.tsx:260
 #: src/pages/Send.tsx:402
-#: src/pages/Settings.tsx:367
-#: src/pages/Settings.tsx:404
+#: src/pages/Settings.tsx:371
+#: src/pages/Settings.tsx:408
 msgid "Days"
 msgstr "Días"
 
-#: src/pages/Settings.tsx:350
+#: src/pages/Settings.tsx:354
 msgid "Default Clawback"
 msgstr ""
 
-#: src/pages/Settings.tsx:339
+#: src/pages/Settings.tsx:343
 msgid "Default Fee"
 msgstr ""
 
-#: src/pages/Settings.tsx:571
+#: src/pages/Settings.tsx:575
 msgid "Default Network"
 msgstr "Red predeterminada"
 
-#: src/pages/Settings.tsx:387
+#: src/pages/Settings.tsx:391
 msgid "Default Offer Expiry"
 msgstr "Caducidad de la oferta predeterminada"
 
@@ -1300,7 +1300,7 @@ msgstr ""
 msgid "Delete All Filtered Offers"
 msgstr ""
 
-#: src/pages/Settings.tsx:1321
+#: src/pages/Settings.tsx:1329
 msgid "Delete and redownload coin data from the network"
 msgstr ""
 
@@ -1343,16 +1343,16 @@ msgstr ""
 msgid "Deleting..."
 msgstr ""
 
-#: src/pages/Settings.tsx:425
+#: src/pages/Settings.tsx:429
 msgid "Delta Sync"
 msgstr ""
 
-#: src/pages/Settings.tsx:1459
+#: src/pages/Settings.tsx:1467
 msgid "Derivation index"
 msgstr "Índice de derivación"
 
-#: src/pages/Settings.tsx:1303
-#: src/pages/Settings.tsx:1453
+#: src/pages/Settings.tsx:1311
+#: src/pages/Settings.tsx:1461
 msgid "Derivation Index"
 msgstr "Índice de Derivación"
 
@@ -1418,7 +1418,7 @@ msgstr "¿Guardaste tu mnemónico?"
 #~ msgid "Disconnect"
 #~ msgstr "Desconectar"
 
-#: src/pages/Settings.tsx:611
+#: src/pages/Settings.tsx:617
 msgid "Discover Peers"
 msgstr "Descubrir nodos"
 
@@ -1436,7 +1436,7 @@ msgstr "Nombre para mostrar"
 msgid "Done"
 msgstr "Listo"
 
-#: src/components/Nav.tsx:168
+#: src/components/Nav.tsx:172
 msgid "Downloading {checkedFiles} / {totalFiles}"
 msgstr ""
 
@@ -1510,7 +1510,7 @@ msgstr "Introducir dirección"
 #~ msgid "Enter amount"
 #~ msgstr "Introducir cantidad"
 
-#: src/pages/Settings.tsx:1289
+#: src/pages/Settings.tsx:1297
 msgid "Enter change address"
 msgstr ""
 
@@ -1524,7 +1524,7 @@ msgstr "Introduzca URLs separadas por comas"
 msgid "Enter count"
 msgstr ""
 
-#: src/pages/Settings.tsx:1458
+#: src/pages/Settings.tsx:1466
 msgid "Enter derivation index"
 msgstr "Introduzca índice de derivación"
 
@@ -1831,7 +1831,7 @@ msgstr "Título completo: {title}"
 msgid "General"
 msgstr "General"
 
-#: src/pages/Settings.tsx:1513
+#: src/pages/Settings.tsx:1521
 msgid "Generate"
 msgstr "Generar"
 
@@ -1843,7 +1843,7 @@ msgstr "Generar"
 #~ msgid "Generate addresses automatically"
 #~ msgstr "Generar Direcciones automaticamente"
 
-#: src/pages/Settings.tsx:1511
+#: src/pages/Settings.tsx:1519
 msgid "Generating"
 msgstr "Generando"
 
@@ -1851,7 +1851,7 @@ msgstr "Generando"
 msgid "Ghost"
 msgstr ""
 
-#: src/pages/Settings.tsx:1213
+#: src/pages/Settings.tsx:1221
 msgid "Give your wallet a memorable name"
 msgstr "Asigna a tu billetera un nombre memorable"
 
@@ -1908,7 +1908,7 @@ msgstr "Opciones de grupo: actualmente agrupadas por {groupMode}"
 #~ msgstr "Direcciones protegidas"
 
 #: src/pages/ImportWallet.tsx:253
-#: src/pages/Settings.tsx:1486
+#: src/pages/Settings.tsx:1494
 msgid "Hardened Keys"
 msgstr ""
 
@@ -1996,8 +1996,8 @@ msgstr "Caliente"
 #: src/pages/MakeOffer.tsx:267
 #: src/pages/MintOption.tsx:275
 #: src/pages/Send.tsx:419
-#: src/pages/Settings.tsx:372
-#: src/pages/Settings.tsx:409
+#: src/pages/Settings.tsx:376
+#: src/pages/Settings.tsx:413
 msgid "Hours"
 msgstr "Horas"
 
@@ -2043,15 +2043,15 @@ msgstr ""
 msgid "Includes a 1% swap fee"
 msgstr ""
 
-#: src/pages/Settings.tsx:1313
+#: src/pages/Settings.tsx:1321
 msgid "Increase"
 msgstr "Aumentar"
 
-#: src/pages/Settings.tsx:1435
+#: src/pages/Settings.tsx:1443
 msgid "Increase Derivation Index"
 msgstr "Aumentar índice de derivación"
 
-#: src/pages/Settings.tsx:1438
+#: src/pages/Settings.tsx:1446
 msgid "Increase the derivation index to generate new addresses. Setting this too high can cause issues, and it can't be reversed without resyncing the wallet."
 msgstr "Aumenta el índice de derivación para generar nuevas direcciones. Configurarlo demasiado alto puede causar problemas y no se puede revertir sin resincronizar la billetera."
 
@@ -2122,7 +2122,7 @@ msgstr "Tipo"
 msgid "Kind is required"
 msgstr "El tipo es obligatorio"
 
-#: src/pages/Settings.tsx:319
+#: src/pages/Settings.tsx:323
 msgid "Language"
 msgstr "Idioma"
 
@@ -2233,7 +2233,7 @@ msgstr "Cargando transacciones..."
 #~ msgid "Loading XCH details..."
 #~ msgstr ""
 
-#: src/pages/Settings.tsx:1365
+#: src/pages/Settings.tsx:1373
 msgid "Loading..."
 msgstr ""
 
@@ -2250,11 +2250,11 @@ msgstr ""
 msgid "Locked in offer"
 msgstr "Bloqueado en oferta"
 
-#: src/pages/Settings.tsx:836
+#: src/pages/Settings.tsx:844
 msgid "Log Level"
 msgstr ""
 
-#: src/pages/Settings.tsx:805
+#: src/pages/Settings.tsx:813
 msgid "Log Viewer"
 msgstr ""
 
@@ -2262,9 +2262,9 @@ msgstr ""
 msgid "Login"
 msgstr "Iniciar sesión"
 
-#: src/components/Nav.tsx:222
-#: src/components/Nav.tsx:228
-#: src/components/Nav.tsx:238
+#: src/components/Nav.tsx:230
+#: src/components/Nav.tsx:236
+#: src/components/Nav.tsx:246
 msgid "Logout"
 msgstr "Cerrar sesión"
 
@@ -2387,8 +2387,8 @@ msgstr "Minting"
 #: src/pages/MakeOffer.tsx:290
 #: src/pages/MintOption.tsx:290
 #: src/pages/Send.tsx:436
-#: src/pages/Settings.tsx:377
-#: src/pages/Settings.tsx:414
+#: src/pages/Settings.tsx:381
+#: src/pages/Settings.tsx:418
 msgid "Minutes"
 msgstr "Minutos"
 
@@ -2401,7 +2401,7 @@ msgstr "Mnemotécnico"
 msgid "More options"
 msgstr ""
 
-#: src/pages/Settings.tsx:300
+#: src/pages/Settings.tsx:304
 msgid "More Themes..."
 msgstr ""
 
@@ -2441,7 +2441,7 @@ msgstr "Menú de navegación"
 
 #: src/components/WalletCard.tsx:466
 #: src/pages/Settings.tsx:149
-#: src/pages/Settings.tsx:569
+#: src/pages/Settings.tsx:573
 msgid "Network"
 msgstr "Red"
 
@@ -2566,7 +2566,7 @@ msgstr "NFTs"
 msgid "NFTs exported successfully"
 msgstr ""
 
-#: src/pages/Settings.tsx:513
+#: src/pages/Settings.tsx:517
 msgid "No active sessions"
 msgstr "No hay sesiones activas"
 
@@ -2617,7 +2617,7 @@ msgstr "Sin agrupación"
 msgid "No items found."
 msgstr ""
 
-#: src/pages/Settings.tsx:866
+#: src/pages/Settings.tsx:874
 msgid "No matching log entries found"
 msgstr ""
 
@@ -2666,7 +2666,7 @@ msgstr ""
 msgid "No tokens to export"
 msgstr ""
 
-#: src/pages/Settings.tsx:181
+#: src/pages/Settings.tsx:183
 msgid "No Wallet Connected"
 msgstr "No hay billetera conectada"
 
@@ -2721,7 +2721,7 @@ msgstr ""
 #~ msgid "Number of addresses to generate at once"
 #~ msgstr "Number of addresses to generate at once"
 
-#: src/pages/Settings.tsx:628
+#: src/pages/Settings.tsx:634
 msgid "Number of peers to maintain connections with"
 msgstr "Número de nodos con los que mantener conexiones"
 
@@ -2822,11 +2822,11 @@ msgstr ""
 msgid "Open menu"
 msgstr "Abrir menú"
 
-#: src/pages/Settings.tsx:1352
+#: src/pages/Settings.tsx:1360
 msgid "Optimize"
 msgstr ""
 
-#: src/pages/Settings.tsx:1350
+#: src/pages/Settings.tsx:1358
 msgid "Optimizing..."
 msgstr ""
 
@@ -2930,11 +2930,11 @@ msgstr "Cantidad de salidas"
 #~ msgid "Override Delta Sync"
 #~ msgstr ""
 
-#: src/pages/Settings.tsx:1240
+#: src/pages/Settings.tsx:1248
 msgid "Override Network"
 msgstr "Sobrescribir red"
 
-#: src/pages/Settings.tsx:1241
+#: src/pages/Settings.tsx:1249
 msgid "Override the default network for this wallet"
 msgstr "Sobrescribir la red predeterminada para esta billetera"
 
@@ -2979,11 +2979,11 @@ msgstr ""
 #~ msgid "Page size"
 #~ msgstr "Tamaño de página"
 
-#: src/pages/Settings.tsx:1411
+#: src/pages/Settings.tsx:1419
 msgid "Page Size"
 msgstr ""
 
-#: src/pages/Settings.tsx:1553
+#: src/pages/Settings.tsx:1561
 msgid "Pages Vacuumed"
 msgstr ""
 
@@ -3019,7 +3019,7 @@ msgstr ""
 #~ msgid "Peak Height"
 #~ msgstr "Altura Máxima"
 
-#: src/components/Nav.tsx:179
+#: src/components/Nav.tsx:185
 msgid "peer"
 msgstr "nodo"
 
@@ -3027,7 +3027,7 @@ msgstr "nodo"
 msgid "Peer List"
 msgstr "Lista de nodos"
 
-#: src/components/Nav.tsx:179
+#: src/components/Nav.tsx:185
 msgid "peers"
 msgstr "nodos"
 
@@ -3088,7 +3088,7 @@ msgstr "Puerto:"
 msgid "Position the QR code within the frame"
 msgstr "Posiciona el código QR dentro del marco"
 
-#: src/pages/Settings.tsx:285
+#: src/pages/Settings.tsx:289
 msgid "Preferences"
 msgstr "Preferencias"
 
@@ -3251,7 +3251,7 @@ msgstr "Volver a descargar {nftName}"
 #~ msgid "Redownloading NFT data"
 #~ msgstr "Volviendo a descargar datos de NFT"
 
-#: src/pages/Settings.tsx:1367
+#: src/pages/Settings.tsx:1375
 msgid "Refresh"
 msgstr ""
 
@@ -3306,7 +3306,7 @@ msgstr ""
 msgid "Requesting in exchange:"
 msgstr ""
 
-#: src/pages/Settings.tsx:308
+#: src/pages/Settings.tsx:312
 msgid "Require biometrics for sensitive actions"
 msgstr ""
 
@@ -3316,8 +3316,8 @@ msgstr "Resultado"
 
 #: src/components/dialogs/ResyncDialog.tsx:46
 #: src/components/dialogs/ResyncDialog.tsx:117
-#: src/pages/Settings.tsx:1320
 #: src/pages/Settings.tsx:1328
+#: src/pages/Settings.tsx:1336
 msgid "Resync"
 msgstr "Sincronizar nuevamente"
 
@@ -3385,15 +3385,15 @@ msgstr "Porcentaje de regalías"
 msgid "royalty to"
 msgstr "regalías a"
 
-#: src/pages/Settings.tsx:987
+#: src/pages/Settings.tsx:995
 msgid "RPC Server"
 msgstr "Servidor RPC"
 
-#: src/pages/Settings.tsx:1011
+#: src/pages/Settings.tsx:1019
 msgid "Run on startup"
 msgstr "Ejecutar al inicio"
 
-#: src/pages/Settings.tsx:997
+#: src/pages/Settings.tsx:1005
 msgid "Running"
 msgstr "Ejecutando"
 
@@ -3434,7 +3434,7 @@ msgstr ""
 #~ msgid "Search for a token"
 #~ msgstr "Buscar un token"
 
-#: src/pages/Settings.tsx:825
+#: src/pages/Settings.tsx:833
 msgid "Search logs..."
 msgstr ""
 
@@ -3526,12 +3526,12 @@ msgstr ""
 msgid "Select kind"
 msgstr "Seleccionar tipo"
 
-#: src/pages/Settings.tsx:811
+#: src/pages/Settings.tsx:819
 msgid "Select log file"
 msgstr ""
 
-#: src/pages/Settings.tsx:597
-#: src/pages/Settings.tsx:1268
+#: src/pages/Settings.tsx:601
+#: src/pages/Settings.tsx:1276
 msgid "Select network"
 msgstr "Seleccionar red"
 
@@ -3643,19 +3643,19 @@ msgstr "Enviado"
 #~ msgid "Set a custom address to send change to"
 #~ msgstr ""
 
-#: src/pages/Settings.tsx:351
+#: src/pages/Settings.tsx:355
 msgid "Set a default clawback time for transactions"
 msgstr ""
 
-#: src/pages/Settings.tsx:388
+#: src/pages/Settings.tsx:392
 msgid "Set a default expiration time for new offers"
 msgstr "Establecer un tiempo de expiración predeterminado para las nuevas ofertas"
 
-#: src/pages/Settings.tsx:1284
+#: src/pages/Settings.tsx:1292
 msgid "Set a specific address to send change to"
 msgstr ""
 
-#: src/components/Nav.tsx:210
+#: src/components/Nav.tsx:218
 #: src/pages/Settings.tsx:108
 msgid "Settings"
 msgstr "Configuración"
@@ -3875,13 +3875,13 @@ msgstr "Dividir Monedas"
 msgid "Split Details"
 msgstr "Detalles de división"
 
-#: src/pages/Settings.tsx:1005
+#: src/pages/Settings.tsx:1013
 msgid "Start"
 msgstr "Comenzar"
 
 #: src/components/confirmations/CancelOfferConfirmation.tsx:87
 #: src/components/OptionColumns.tsx:141
-#: src/pages/Settings.tsx:1334
+#: src/pages/Settings.tsx:1342
 msgid "Status"
 msgstr "Estado"
 
@@ -3890,11 +3890,11 @@ msgstr "Estado"
 msgid "Status: {0}"
 msgstr ""
 
-#: src/pages/Settings.tsx:1005
+#: src/pages/Settings.tsx:1013
 msgid "Stop"
 msgstr "Detener"
 
-#: src/pages/Settings.tsx:997
+#: src/pages/Settings.tsx:1005
 msgid "Stopped"
 msgstr "Detenido"
 
@@ -3987,19 +3987,23 @@ msgstr "Símbolo"
 msgid "Sync Status"
 msgstr ""
 
-#: src/components/Nav.tsx:182
+#: src/components/Nav.tsx:161
+msgid "Synced"
+msgstr ""
+
+#: src/components/Nav.tsx:190
 msgid "synced to peak {peerMaxHeight}"
 msgstr "sincronizado con el pico {peerMaxHeight}"
 
-#: src/pages/Settings.tsx:1301
+#: src/pages/Settings.tsx:1309
 msgid "Syncing"
 msgstr "Sincronizando"
 
-#: src/components/Nav.tsx:172
+#: src/components/Nav.tsx:176
 msgid "Syncing {syncedCoins} / {totalCoins}"
 msgstr "Sincronizando {syncedCoins} / {totalCoins}"
 
-#: src/pages/Settings.tsx:423
+#: src/pages/Settings.tsx:427
 msgid "Syncing Defaults"
 msgstr ""
 
@@ -4032,7 +4036,7 @@ msgstr "Aceptando Oferta"
 msgid "Taking this offer will send the assets you are paying to the recipient."
 msgstr "Aceptar esta oferta enviará los activos que está pagando al destinatario."
 
-#: src/pages/Settings.tsx:627
+#: src/pages/Settings.tsx:633
 msgid "Target Peers"
 msgstr "Nodos objetivo"
 
@@ -4073,7 +4077,7 @@ msgstr "Los activos que estás pagando."
 msgid "The assets you will receive."
 msgstr "Los activos que recibirás."
 
-#: src/pages/Settings.tsx:340
+#: src/pages/Settings.tsx:344
 msgid "The default fee to use for transactions"
 msgstr ""
 
@@ -4089,7 +4093,7 @@ msgstr ""
 #~ msgid "The network which this wallet will use"
 #~ msgstr "La red que utilizará esta billetera"
 
-#: src/pages/Settings.tsx:1304
+#: src/pages/Settings.tsx:1312
 msgid "The number of addresses managed by this wallet"
 msgstr "El número de direcciones gestionadas por esta billetera"
 
@@ -4110,7 +4114,7 @@ msgid "The wallet is still syncing. Balances may not be accurate until it comple
 msgstr "La billetera sigue sincronizando. Los saldos pueden no ser precisos hasta que se complete."
 
 #: src/components/NftCard.tsx:348
-#: src/pages/Settings.tsx:287
+#: src/pages/Settings.tsx:291
 msgid "Theme"
 msgstr ""
 
@@ -4478,7 +4482,7 @@ msgstr ""
 msgid "Total Amount"
 msgstr "Cantidad total"
 
-#: src/pages/Settings.tsx:1545
+#: src/pages/Settings.tsx:1553
 msgid "Total Duration"
 msgstr ""
 
@@ -4494,7 +4498,7 @@ msgstr ""
 msgid "Total items: {total}"
 msgstr "Total de artículos: {total}"
 
-#: src/pages/Settings.tsx:1395
+#: src/pages/Settings.tsx:1403
 msgid "Total Pages"
 msgstr ""
 
@@ -4518,7 +4522,7 @@ msgstr ""
 #~ msgid "Transaction #{height}"
 #~ msgstr "Transacción #{height}"
 
-#: src/pages/Settings.tsx:337
+#: src/pages/Settings.tsx:341
 msgid "Transaction Defaults"
 msgstr ""
 
@@ -4664,7 +4668,7 @@ msgid "Underlying Asset (Locked)"
 msgstr ""
 
 #: src/pages/ImportWallet.tsx:239
-#: src/pages/Settings.tsx:1472
+#: src/pages/Settings.tsx:1480
 msgid "Unhardened Keys"
 msgstr ""
 
@@ -4678,8 +4682,8 @@ msgstr ""
 msgid "Unknown"
 msgstr "Desconocido"
 
-#: src/pages/Settings.tsx:495
 #: src/pages/Settings.tsx:499
+#: src/pages/Settings.tsx:503
 msgid "Unknown App"
 msgstr "Aplicación desconocida"
 
@@ -4858,7 +4862,7 @@ msgstr ""
 msgid "Use this address to receive {name}"
 msgstr "Utilice esta dirección para recibir {name}"
 
-#: src/pages/Settings.tsx:1585
+#: src/pages/Settings.tsx:1593
 msgid "Vacuum Duration"
 msgstr ""
 
@@ -4955,15 +4959,15 @@ msgstr "Ver opciones"
 #~ msgid "View Unknown CAT token details"
 #~ msgstr "Ver detalles del token CAT desconocido"
 
-#: src/pages/Settings.tsx:1569
+#: src/pages/Settings.tsx:1577
 msgid "WAL Checkpoint Duration"
 msgstr ""
 
-#: src/pages/Settings.tsx:1419
+#: src/pages/Settings.tsx:1427
 msgid "WAL Pages"
 msgstr ""
 
-#: src/pages/Settings.tsx:1577
+#: src/pages/Settings.tsx:1585
 msgid "WAL Pages Checkpointed"
 msgstr ""
 
@@ -4974,7 +4978,7 @@ msgstr ""
 #: src/components/WalletSwitcher.tsx:360
 #: src/pages/Login.tsx:205
 #: src/pages/Settings.tsx:142
-#: src/pages/Settings.tsx:1210
+#: src/pages/Settings.tsx:1218
 msgid "Wallet"
 msgstr "Billetera"
 
@@ -5005,15 +5009,15 @@ msgstr "Llave de la billetera"
 #: src/components/WalletCard.tsx:419
 #: src/pages/CreateWallet.tsx:154
 #: src/pages/ImportWallet.tsx:134
-#: src/pages/Settings.tsx:1212
+#: src/pages/Settings.tsx:1220
 msgid "Wallet Name"
 msgstr "Nombre de la billetera"
 
-#: src/pages/Settings.tsx:485
+#: src/pages/Settings.tsx:489
 msgid "WalletConnect"
 msgstr "WalletConnect"
 
-#: src/pages/Settings.tsx:522
+#: src/pages/Settings.tsx:526
 msgid "WalletConnect URI"
 msgstr "URI de WalletConnect"
 
@@ -5039,7 +5043,7 @@ msgstr ""
 msgid "While 12 word mnemonics are sufficiently hard to crack, you can choose to use 24 instead to increase security."
 msgstr "Si bien los mnemotécnicos de 12 palabras son lo suficientemente difíciles de crackear, puedes optar por usar 24 para aumentar la seguridad."
 
-#: src/components/Nav.tsx:187
+#: src/components/Nav.tsx:195
 msgid "with {syncedCoins} / {totalCoins} coins synced"
 msgstr "con {syncedCoins} / {totalCoins} monedas sincronizadas"
 

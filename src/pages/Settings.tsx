@@ -1116,7 +1116,9 @@ function WalletSettings({ fingerprint }: { fingerprint: number }) {
       .catch(addError);
 
     // Fetch database stats when component mounts
-    fetchDatabaseStats();
+    if (!__IS_EXTENSION__) {
+      fetchDatabaseStats();
+    }
   }, [addError, fingerprint, fetchDatabaseStats]);
 
   const addNetworkOverride = async () => {
@@ -1339,102 +1341,106 @@ function WalletSettings({ fingerprint }: { fingerprint: number }) {
         />
       </SettingsSection>
 
-      <SettingsSection title={t`Status`}>
-        <SettingItem
-          label={t`Database Stats`}
-          description={t`Current database statistics and health information`}
-          control={
-            <div className='flex gap-2'>
-              <Button
-                variant='outline'
-                size='sm'
-                disabled={performingMaintenance}
-                onClick={performMaintenance}
-              >
-                {performingMaintenance && (
-                  <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
-                )}
-                {performingMaintenance ? (
-                  <Trans>Optimizing...</Trans>
-                ) : (
-                  <Trans>Optimize</Trans>
-                )}
-              </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                disabled={loadingStats}
-                onClick={fetchDatabaseStats}
-              >
-                {loadingStats && (
-                  <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
-                )}
-                {loadingStats ? (
-                  <Trans>Loading...</Trans>
-                ) : (
-                  <Trans>Refresh</Trans>
-                )}
-              </Button>
-            </div>
-          }
-        >
-          {dbStats && (
-            <div className='mt-3 space-y-3'>
-              <div className='grid grid-cols-2 gap-4 text-sm'>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Database Size</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {prettyBytes(dbStats.database_size_bytes, { locale: true })}
+      {!__IS_EXTENSION__ && (
+        <SettingsSection title={t`Status`}>
+          <SettingItem
+            label={t`Database Stats`}
+            description={t`Current database statistics and health information`}
+            control={
+              <div className='flex gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  disabled={performingMaintenance}
+                  onClick={performMaintenance}
+                >
+                  {performingMaintenance && (
+                    <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
+                  )}
+                  {performingMaintenance ? (
+                    <Trans>Optimizing...</Trans>
+                  ) : (
+                    <Trans>Optimize</Trans>
+                  )}
+                </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  disabled={loadingStats}
+                  onClick={fetchDatabaseStats}
+                >
+                  {loadingStats && (
+                    <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
+                  )}
+                  {loadingStats ? (
+                    <Trans>Loading...</Trans>
+                  ) : (
+                    <Trans>Refresh</Trans>
+                  )}
+                </Button>
+              </div>
+            }
+          >
+            {dbStats && (
+              <div className='mt-3 space-y-3'>
+                <div className='grid grid-cols-2 gap-4 text-sm'>
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Database Size</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {prettyBytes(dbStats.database_size_bytes, {
+                        locale: true,
+                      })}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Compactable Space</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {prettyBytes(dbStats.free_space_bytes, { locale: true })} (
-                    {dbStats.free_percentage.toFixed(1)}%)
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Compactable Space</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {prettyBytes(dbStats.free_space_bytes, { locale: true })}{' '}
+                      ({dbStats.free_percentage.toFixed(1)}%)
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Total Pages</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {dbStats.total_pages.toLocaleString()}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Total Pages</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {dbStats.total_pages.toLocaleString()}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Compactable Pages</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {dbStats.free_pages.toLocaleString()}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Compactable Pages</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {dbStats.free_pages.toLocaleString()}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Page Size</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {prettyBytes(dbStats.page_size, { locale: true })}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Page Size</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {prettyBytes(dbStats.page_size, { locale: true })}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>WAL Pages</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {dbStats.wal_pages.toLocaleString()}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>WAL Pages</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {dbStats.wal_pages.toLocaleString()}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </SettingItem>
-      </SettingsSection>
+            )}
+          </SettingItem>
+        </SettingsSection>
+      )}
 
       <Dialog open={deriveOpen} onOpenChange={setDeriveOpen}>
         <DialogContent>

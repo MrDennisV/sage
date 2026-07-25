@@ -2,9 +2,11 @@ use std::cell::Cell;
 
 use sage::Sage;
 use sage_api::{
-    GetPeersResponse, ImportKey, ImportKeyResponse, Login, LoginResponse, Logout, LogoutResponse,
-    SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse, SetNetworkResponse,
+    GetPeersResponse, GetUserThemesResponse, ImportKey, ImportKeyResponse, Login, LoginResponse,
+    Logout, LogoutResponse, SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse,
+    SetNetworkResponse,
 };
+use serde::Deserialize;
 use sage_api_macro::impl_endpoints_portable;
 use serde::{Serialize, de::DeserializeOwned};
 use wasm_bindgen::prelude::*;
@@ -136,6 +138,23 @@ fn session_command(
         // there is nothing to do here. Matches the unit the native command
         // returns.
         "switch_wallet" | "initialize" => encode(&())?,
+        // Config readers. These are hand-written Tauri commands rather than
+        // API endpoints, so they aren't part of the generated dispatch.
+        "network_config" => encode(&sage.config.network)?,
+        "default_wallet_config" => encode(&sage.wallet_config.defaults)?,
+        "wallet_config" => {
+            let req: WalletConfigRequest = decode(payload)?;
+            encode(
+                &sage
+                    .wallet_config
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.fingerprint == req.fingerprint),
+            )?
+        }
+        // User themes are directories on disk, which the browser store has no
+        // equivalent for; the built-in themes come from the frontend.
+        "get_user_themes" => encode(&GetUserThemesResponse { themes: Vec::new() })?,
         // There are no peer connections in the HTTP model; every request goes
         // straight to the Coinset API.
         "get_peers" => encode(&GetPeersResponse { peers: Vec::new() })?,
@@ -143,6 +162,13 @@ fn session_command(
     };
 
     Ok(Some(response))
+}
+
+/// The `wallet_config` command takes a bare fingerprint rather than a request
+/// struct, matching its Tauri signature.
+#[derive(Debug, Deserialize)]
+struct WalletConfigRequest {
+    fingerprint: u32,
 }
 
 fn decode<T: DeserializeOwned>(payload: &str) -> Result<T, JsValue> {

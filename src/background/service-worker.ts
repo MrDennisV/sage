@@ -15,6 +15,7 @@ import { databaseKey, flushDb, initSqlEngine, selectDatabase } from './sql-store
 
 const SYNC_ALARM = 'sage-sync';
 const SYNC_PERIOD_MINUTES = 0.5;
+const KEEPALIVE_INTERVAL_MS = 20_000;
 
 interface Session {
   fingerprint: number | null;
@@ -77,14 +78,42 @@ function boot(): Promise<void> {
   return booted;
 }
 
+// The wasm module holds one wallet over one sql.js connection, so commands and
+// syncs have to take turns; overlapping them would interleave transactions.
+// Chrome also stops a service worker after 30 seconds without extension API
+// activity, which aborts in-flight requests, so the worker is kept alive while
+// the turn runs.
+let queue: Promise<unknown> = Promise.resolve();
+
+function exclusive<T>(work: () => Promise<T>): Promise<T> {
+  const run = queue.then(async () => {
+    const timer = setInterval(() => {
+      chrome.runtime.getPlatformInfo().catch(() => {});
+    }, KEEPALIVE_INTERVAL_MS);
+
+    try {
+      return await work();
+    } finally {
+      clearInterval(timer);
+    }
+  });
+
+  queue = run.catch(() => {});
+
+  return run;
+}
+
 async function syncOnce(): Promise<void> {
-  await boot();
+  const events = await exclusive(async () => {
+    await boot();
 
-  if (session().fingerprint === null) return;
+    if (session().fingerprint === null) return [];
 
-  const events: unknown[] = JSON.parse(await sage_sync_once(true));
+    const collected: unknown[] = JSON.parse(await sage_sync_once(true));
+    await flushDb();
 
-  await flushDb();
+    return collected;
+  });
 
   for (const event of events) {
     chrome.runtime.sendMessage({ type: 'SYNC_EVENT', data: event }).catch(() => {
@@ -106,10 +135,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'COMMAND') return false;
 
-  (async () => {
-    await boot();
+  const { cmd, args } = message as { cmd: string; args?: { req?: unknown } };
 
-    const { cmd, args } = message as { cmd: string; args?: { req?: unknown } };
+  exclusive(async () => {
+    await boot();
 
     // Tauri commands take the request wrapped in a `req` field; the wasm
     // dispatch takes the request struct itself.
@@ -121,7 +150,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
       await useSessionDatabase();
-      syncOnce().catch((error) => console.error('sync failed', error));
     }
 
     if (FLUSH_COMMANDS.has(cmd) || cmd === 'login') {
@@ -130,9 +158,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     return response;
-  })()
+  })
+    .then((response) => {
+      if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
+        syncOnce().catch((error) => console.error('sync failed', error));
+      }
+      return response;
+    })
     .then((data) => sendResponse({ data }))
-    .catch((error) => sendResponse({ error: error?.message ?? String(error) }));
+    .catch((error) => {
+      const reason = error?.message ?? String(error);
+      console.error(`command ${message.cmd} failed:`, reason);
+      sendResponse({ error: reason });
+    });
 
   return true;
 });
