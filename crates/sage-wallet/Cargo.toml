@@ -21,8 +21,6 @@ native = [
     "dep:tokio",
     "dep:reqwest",
     "dep:sage-config",
-    "dep:futures-util",
-    "dep:futures-lite",
     "sage-assets/native",
     "sage-database/sqlite",
 ]
@@ -55,8 +53,8 @@ sage-database = { workspace = true }
 # Native-only dependencies
 sage-config = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["time"], optional = true }
-futures-util = { workspace = true, optional = true }
-futures-lite = { workspace = true, optional = true }
+futures-util = { workspace = true }
+futures-lite = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = ["http2", "rustls-tls-webpki-roots", "json"], optional = true }
 
 base64 = { workspace = true }

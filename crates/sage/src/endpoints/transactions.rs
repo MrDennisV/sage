@@ -1,4 +1,3 @@
-#[cfg(feature = "native")]
 use std::time::Duration;
 
 use chia_puzzle_types::nft::NftMetadata;
@@ -13,13 +12,11 @@ use sage_api::{
     TransactionResponse, TransferDids, TransferNfts, TransferOptions, ViewCoinSpends,
     ViewCoinSpendsResponse,
 };
-#[cfg(feature = "native")]
 use sage_assets::fetch_uris_without_hash;
 use sage_database::{Asset, AssetKind, SqlExecutor};
+use sage_wallet::portable::timeout;
 use sage_wallet::prelude::*;
 use sage_wallet::{MultiSendPayment, WalletNftMint, WalletOptionMint};
-#[cfg(feature = "native")]
-use tokio::time::timeout;
 
 use crate::{
     ConfirmationInfo, Error, Result, Sage, json_bundle, json_spend, parse_amount, parse_asset_id,
@@ -632,7 +629,6 @@ impl<E: SqlExecutor> Sage<E> {
 
 /// Downloads the content behind a set of URIs to compute its hash, caching the
 /// blob so the confirmation summary can render it.
-#[cfg(feature = "native")]
 async fn fetch_uri_hash(
     uris: Vec<String>,
     testnet: bool,
@@ -642,21 +638,11 @@ async fn fetch_uri_hash(
         Duration::from_secs(10),
         fetch_uris_without_hash(uris, testnet),
     )
-    .await??;
+    .await
+    .ok_or(Error::MissingUriHash)??;
 
     let hash = data.hash;
     info.nft_data.insert(hash, data);
 
     Ok(Some(hash))
-}
-
-/// URI content can't be downloaded without a native HTTP client, so the caller
-/// has to supply the hash it should be minted under.
-#[cfg(not(feature = "native"))]
-fn fetch_uri_hash(
-    _uris: Vec<String>,
-    _testnet: bool,
-    _info: &mut ConfirmationInfo,
-) -> impl Future<Output = Result<Option<Bytes32>>> {
-    std::future::ready(Err(Error::MissingUriHash))
 }

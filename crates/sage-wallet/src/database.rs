@@ -1,16 +1,21 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use crate::prelude::*;
 use chia_puzzle_types::{LineageProof, nft::NftMetadata};
 
-use sage_assets::DexieCat;
+use futures_lite::StreamExt;
+use futures_util::stream::FuturesUnordered;
+use sage_assets::{DexieCat, UriError, fetch_uri};
 use sage_database::{
-    Asset, AssetKind, Database, DatabaseTx, DidCoinInfo, NftCoinInfo, OptionCoinInfo,
-    SerializedNftInfo, SqlExecutor,
+    Asset, AssetKind, Database, DatabaseTx, DidCoinInfo, NftCoinInfo, NftMetadataInfo,
+    OptionCoinInfo, ResizedImageKind, SerializedNftInfo, SqlExecutor,
 };
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
-use crate::portable::base64_data_uri;
+use crate::portable::{base64_data_uri, timeout};
 use crate::{
     ChildKind, OptionContext, PeerApi, PendingPeer, PuzzleContext, Transaction, WalletError,
     compute_nft_info,
@@ -61,6 +66,110 @@ pub async fn refresh_cat_catalog<E: SqlExecutor>(
     }
 
     Ok(recorded)
+}
+
+/// How long a single URI may take before it is treated as a failure and left
+/// for a later round.
+const URI_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Downloads the content behind one batch of NFT URIs and records it, which is
+/// where an NFT's name, description, collection and picture come from. Returns
+/// whether anything was downloaded, since an empty batch means every URI has
+/// been checked recently and there is nothing for the caller to announce.
+pub async fn download_nft_uris<E: SqlExecutor>(
+    db: &Database<E>,
+    testnet: bool,
+    batch_size: u32,
+) -> Result<bool, WalletError> {
+    let batch = db
+        .candidates_for_download(60 * 60 * 24, 3, batch_size)
+        .await?;
+
+    if batch.is_empty() {
+        return Ok(false);
+    }
+
+    // The downloads are network bound and independent, so they run together;
+    // the results are recorded one at a time because they share a connection.
+    let mut downloads = FuturesUnordered::new();
+
+    for item in batch {
+        downloads.push(async {
+            let data = timeout(URI_TIMEOUT, fetch_uri(item.uri.clone(), testnet)).await;
+            (item, data)
+        });
+    }
+
+    while let Some((item, data)) = downloads.next().await {
+        let mut tx = db.tx().await?;
+
+        match data.unwrap_or(Err(UriError::Timeout)) {
+            Ok(data) => {
+                let is_hash_match = data.hash == item.hash;
+
+                if !is_hash_match {
+                    warn!(
+                        "Hash mismatch for URI {} (expected {} but found {})",
+                        item.uri, item.hash, data.hash
+                    );
+                }
+
+                if let Some(thumbnail) = &data.thumbnail {
+                    tx.update_nft_data_hash_urls(
+                        item.hash,
+                        base64_data_uri(&thumbnail.icon, "image/png"),
+                    )
+                    .await?;
+                }
+
+                for nft in tx.nfts_with_metadata_hash(item.hash).await? {
+                    let info = compute_nft_info(nft.minter_hash, &data.blob);
+
+                    let collection_id = info.collection.as_ref().map(|collection| collection.hash);
+
+                    if let Some(collection) = info.collection {
+                        tx.insert_collection(collection).await?;
+                    }
+
+                    tx.update_nft_metadata(
+                        nft.hash,
+                        NftMetadataInfo {
+                            name: info.name,
+                            description: info.description,
+                            is_sensitive_content: info.sensitive_content,
+                            collection_id: collection_id.unwrap_or_default(),
+                        },
+                    )
+                    .await?;
+                }
+
+                tx.update_file(item.hash, data.blob, data.mime_type, is_hash_match)
+                    .await?;
+
+                if let Some(thumbnail) = data.thumbnail {
+                    tx.insert_resized_image(item.hash, ResizedImageKind::Icon, thumbnail.icon)
+                        .await?;
+
+                    tx.insert_resized_image(
+                        item.hash,
+                        ResizedImageKind::Thumbnail,
+                        thumbnail.thumbnail,
+                    )
+                    .await?;
+                }
+
+                tx.update_checked_uri(item.hash, item.uri).await?;
+            }
+            Err(error) => {
+                debug!("Error fetching URI {}: {error}", item.uri);
+                tx.update_failed_uri(item.hash, item.uri).await?;
+            }
+        }
+
+        tx.commit().await?;
+    }
+
+    Ok(true)
 }
 
 /// Records one page of the token catalog, returning whether the page held

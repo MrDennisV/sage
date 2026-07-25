@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{future::Future, time::Duration};
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -13,6 +13,23 @@ cfg_if::cfg_if! {
             tokio::time::sleep(duration).await;
         }
     }
+}
+
+/// Runs a future with a deadline, returning `None` when it runs out. The
+/// browser has no runtime timer to hand the work to, so it races the future
+/// against a sleep instead.
+pub async fn timeout<F: Future>(duration: Duration, future: F) -> Option<F::Output> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        tokio::time::timeout(duration, future).await.ok()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    futures_lite::future::or(async { Some(future.await) }, async {
+        sleep(duration).await;
+        None
+    })
+    .await
 }
 
 /// The current Unix timestamp in seconds, falling back to the epoch if the
