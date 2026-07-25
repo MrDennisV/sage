@@ -6531,6 +6531,7 @@ dependencies = [
  "chia-protocol",
  "chia-sdk-coinset",
  "chia-sdk-utils",
+ "futures-util",
  "getrandom 0.3.4",
  "js-sys",
  "sage",

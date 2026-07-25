@@ -70,17 +70,12 @@ function persistNow() {
   persisting = persisting.then(() => saveImage(key, image));
 }
 
-function schedulePersist(immediate: boolean) {
+function schedulePersist() {
   if (persistTimer) {
     clearTimeout(persistTimer);
-    persistTimer = null;
   }
 
-  if (immediate) {
-    persistNow();
-  } else {
-    persistTimer = setTimeout(persistNow, PERSIST_DEBOUNCE_MS);
-  }
+  persistTimer = setTimeout(persistNow, PERSIST_DEBOUNCE_MS);
 }
 
 /** Waits until every scheduled persist has been written to IndexedDB. */
@@ -181,16 +176,23 @@ export function registerSqlBridge() {
       changes = database.getRowsModified();
     }
 
-    const isCommit = sql.trim().toUpperCase().startsWith('COMMIT');
-    schedulePersist(isCommit);
+    // Persisting exports the whole database, so it is always debounced: a
+    // sync over a large wallet commits many times, and exporting on each one
+    // stalls every other request. Durability comes from flushDb(), which the
+    // worker awaits after each sync pass and before answering commands that
+    // write.
+    schedulePersist();
 
     return changes;
   };
 
   globals.dbExecuteBatch = (sql: string): void => {
     required().run(sql);
-    schedulePersist(false);
+    schedulePersist();
   };
+
+  // Used by the persistence benchmark to size the database image.
+  globals.dbImageSize = (): number => required().export().length;
 }
 
 export async function initSqlEngine(): Promise<void> {

@@ -1,6 +1,7 @@
 use std::{cell::RefCell, sync::Arc};
 
 use chia_protocol::Bytes32;
+use futures_util::future::join_all;
 use sage_wallet::{
     CoinsetPeer, EventSink, SyncEvent, Wallet, add_new_subscriptions, apply_synced_coins,
     fetch_puzzles, sync_wallet,
@@ -77,18 +78,31 @@ pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
     serde_json::to_string(&events).map_err(js_error)
 }
 
-/// Identifies unsynced coins in bounded rounds, mirroring the native
-/// `PuzzleQueue`. Coins that fail to fetch are skipped; the round bound
-/// keeps repeated failures from spinning the loop forever.
+/// How many coins to claim from the database per round.
+const BATCH_SIZE: usize = 50;
+
+/// How many coin lookups to have in flight at once. Browsers cap concurrent
+/// connections per host, so a larger number wouldn't go any faster.
+const CONCURRENT_REQUESTS: usize = 6;
+
+/// How long one pass may spend identifying coins. The pass runs while holding
+/// the wallet, so it has to hand control back for the interface to stay
+/// responsive; the next pass picks up where this one stopped.
+const PUZZLE_SYNC_BUDGET_MS: f64 = 5_000.0;
+
+/// Identifies unsynced coins, mirroring the native `PuzzleQueue`. Coins that
+/// fail to fetch are skipped, and the time budget keeps a large wallet (or
+/// repeated failures) from holding the wallet for the whole sync.
 async fn identify_puzzles(
     wallet: &Arc<Wallet<BrowserExecutor>>,
     peer: &CoinsetPeer,
     sink: &CollectorSink,
 ) -> Result<(), JsValue> {
     let mut subscriptions = Vec::new();
+    let deadline = js_sys::Date::now() + PUZZLE_SYNC_BUDGET_MS;
 
-    for _ in 0..20 {
-        let rows = wallet.db.unsynced_coins(50).await.map_err(js_error)?;
+    while js_sys::Date::now() < deadline {
+        let rows = wallet.db.unsynced_coins(BATCH_SIZE).await.map_err(js_error)?;
 
         if rows.is_empty() {
             break;
@@ -96,24 +110,43 @@ async fn identify_puzzles(
 
         let mut send_events = false;
 
-        for row in rows {
-            let is_custody = wallet
-                .db
-                .is_custody_p2_puzzle_hash(row.coin_state.coin.puzzle_hash)
-                .await
-                .map_err(js_error)?;
+        for chunk in rows.chunks(CONCURRENT_REQUESTS) {
+            let mut requests = Vec::with_capacity(chunk.len());
 
-            match fetch_puzzles(peer, wallet.genesis_challenge, row, is_custody).await {
-                Ok(synced) => {
-                    send_events |= apply_synced_coins(&wallet.db, &row, synced, &mut subscriptions)
-                        .await
-                        .map_err(js_error)?;
-                }
-                Err(error) => {
-                    debug!(
-                        "Failed to sync coin {}: {error}",
-                        row.coin_state.coin.coin_id()
-                    );
+            for row in chunk {
+                let is_custody = wallet
+                    .db
+                    .is_custody_p2_puzzle_hash(row.coin_state.coin.puzzle_hash)
+                    .await
+                    .map_err(js_error)?;
+
+                requests.push(fetch_puzzles(
+                    peer,
+                    wallet.genesis_challenge,
+                    *row,
+                    is_custody,
+                ));
+            }
+
+            // The lookups are network bound, so they run together; the results
+            // are applied one at a time because they share a database
+            // connection.
+            let results = join_all(requests).await;
+
+            for (row, result) in chunk.iter().zip(results) {
+                match result {
+                    Ok(synced) => {
+                        send_events |=
+                            apply_synced_coins(&wallet.db, row, synced, &mut subscriptions)
+                                .await
+                                .map_err(js_error)?;
+                    }
+                    Err(error) => {
+                        debug!(
+                            "Failed to sync coin {}: {error}",
+                            row.coin_state.coin.coin_id()
+                        );
+                    }
                 }
             }
         }
