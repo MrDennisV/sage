@@ -60,13 +60,31 @@ async function saveImage(key: string, image: Uint8Array): Promise<void> {
   });
 }
 
+/**
+ * sqlx turns foreign keys on for every native connection, so the schema's
+ * cascades are part of what the queries expect. sql.js defaults them off, and
+ * it drops the connection to export an image, which resets the setting. Every
+ * place a connection appears or reappears goes through here.
+ */
+function connect(database: Database): Database {
+  database.run('PRAGMA foreign_keys = ON');
+  return database;
+}
+
+/** Exports the database image, keeping the reopened connection configured. */
+function exportImage(database: Database): Uint8Array {
+  const image = database.export();
+  connect(database);
+  return image;
+}
+
 function persistNow() {
   const key = dbKey;
   const database = db;
 
   if (!key || !database) return;
 
-  const image = database.export();
+  const image = exportImage(database);
   persisting = persisting.then(() => saveImage(key, image));
 }
 
@@ -192,7 +210,7 @@ export function registerSqlBridge() {
   };
 
   // Used by the persistence benchmark to size the database image.
-  globals.dbImageSize = (): number => required().export().length;
+  globals.dbImageSize = (): number => exportImage(required()).length;
 }
 
 export async function initSqlEngine(): Promise<void> {
@@ -261,7 +279,7 @@ export async function selectDatabase(key: string): Promise<boolean> {
   db?.close();
 
   const image = await loadImage(key);
-  db = image ? new sql.Database(image) : new sql.Database();
+  db = connect(image ? new sql.Database(image) : new sql.Database());
   dbKey = key;
 
   return image === null;
