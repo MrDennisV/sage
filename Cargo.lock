@@ -6530,6 +6530,7 @@ dependencies = [
  "base64 0.22.1",
  "chia-protocol",
  "chia-sdk-coinset",
+ "chia-sdk-utils",
  "getrandom 0.3.4",
  "js-sys",
  "sage",

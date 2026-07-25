@@ -116,12 +116,13 @@ async fn transaction(mut conn: impl SqlAccess, height: u32) -> Result<Option<Tra
             p2_puzzle_hash: row.opt_converted("p2_puzzle_hash")?,
         };
 
-        // these represent whether the coins was spent and/or created in this block
-        if row.i64("is_spent_in_block")? == 1 {
+        // These compare a coin height against the block height, so they are
+        // null when the coin has no such height rather than false.
+        if row.opt_i64("is_spent_in_block")? == Some(1) {
             spent_coins.push(transaction_coin.clone());
         }
 
-        if row.i64("is_created_in_block")? == 1 {
+        if row.opt_i64("is_created_in_block")? == Some(1) {
             created_coins.push(transaction_coin);
         }
     }
@@ -226,8 +227,8 @@ fn group_rows_into_transactions(rows: &[SqlRow], sort_ascending: bool) -> Result
     for row in rows {
         let height: u32 = row.i64("height")?.convert()?;
         let timestamp: Option<i64> = row.opt_i64("timestamp")?;
-        let is_spent_in_block: i64 = row.i64("is_spent_in_block")?;
-        let is_created_in_block: i64 = row.i64("is_created_in_block")?;
+        let is_spent_in_block = row.opt_i64("is_spent_in_block")?;
+        let is_created_in_block = row.opt_i64("is_created_in_block")?;
 
         let transaction_coin = create_transaction_coin(row)?;
 
@@ -235,12 +236,13 @@ fn group_rows_into_transactions(rows: &[SqlRow], sort_ascending: bool) -> Result
             .entry(height)
             .or_insert_with(|| (timestamp.map(|ts| ts as u64), Vec::new(), Vec::new()));
 
-        // these represent whether the coin was spent and/or created in this block
-        if is_spent_in_block == 1 {
+        // These compare a coin height against the block height, so they are
+        // null when the coin has no such height rather than false.
+        if is_spent_in_block == Some(1) {
             entry.1.push(transaction_coin.clone());
         }
 
-        if is_created_in_block == 1 {
+        if is_created_in_block == Some(1) {
             entry.2.push(transaction_coin);
         }
     }

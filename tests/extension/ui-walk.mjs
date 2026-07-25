@@ -59,10 +59,13 @@ try {
 
   const routes = [
     '#/wallet',
+    '#/wallet/send/xch',
+    '#/wallet/receive/xch',
     '#/transactions',
     '#/nfts',
     '#/dids',
     '#/offers',
+    '#/offers/make',
     '#/settings',
     '#/settings?tab=wallet',
     '#/settings?tab=network',
@@ -72,6 +75,17 @@ try {
     const before = failures.length;
     await page.goto(`chrome-extension://${id}/popup.html${route}`);
     await page.waitForTimeout(2500);
+
+    // Typing an address exercises validation, which the send page runs on
+    // every keystroke.
+    const address = page.locator('input').first();
+    if (route.includes('/send/') && (await address.count())) {
+      await address.fill(
+        'xch1qkludcemyh7x0wnxy65ukj5uh3eqgve4zgjun7hmt9n6mgprw6kqqxx6yz',
+      );
+      await page.waitForTimeout(1500);
+    }
+
     const added = failures.slice(before);
     console.log(`${route}: ${added.length ? `${added.length} error(s)` : 'clean'}`);
   }

@@ -27,6 +27,7 @@ sage-keychain = { workspace = true }
 sage-wallet = { workspace = true, features = ["coinset"] }
 
 chia-protocol = { workspace = true }
+chia-sdk-utils = { workspace = true }
 chia-sdk-coinset = { workspace = true }
 
 base64 = { workspace = true }

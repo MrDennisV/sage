@@ -1,14 +1,14 @@
 use std::cell::Cell;
 
+use chia_sdk_utils::Address;
 use sage::Sage;
 use sage_api::{
     GetPeersResponse, GetUserThemesResponse, ImportKey, ImportKeyResponse, Login, LoginResponse,
     Logout, LogoutResponse, SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse,
     SetNetworkResponse,
 };
-use serde::Deserialize;
 use sage_api_macro::impl_endpoints_portable;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -138,6 +138,27 @@ fn session_command(
         // there is nothing to do here. Matches the unit the native command
         // returns.
         "switch_wallet" | "initialize" => encode(&())?,
+        "validate_address" => {
+            let req: AddressRequest = decode(payload)?;
+            let valid = Address::decode(&req.address)
+                .is_ok_and(|address| address.prefix == sage.network().prefix());
+            encode(&valid)?
+        }
+        "move_key" => {
+            let req: MoveKeyRequest = decode(payload)?;
+
+            let index = sage
+                .wallet_config
+                .wallets
+                .iter()
+                .position(|wallet| wallet.fingerprint == req.fingerprint)
+                .ok_or_else(|| js_error(sage::Error::UnknownFingerprint))?;
+
+            let wallet = sage.wallet_config.wallets.remove(index);
+            sage.wallet_config.wallets.insert(req.index as usize, wallet);
+            sage.save_config().map_err(js_error)?;
+            encode(&())?
+        }
         // Config readers. These are hand-written Tauri commands rather than
         // API endpoints, so they aren't part of the generated dispatch.
         "network_config" => encode(&sage.config.network)?,
@@ -164,11 +185,23 @@ fn session_command(
     Ok(Some(response))
 }
 
-/// The `wallet_config` command takes a bare fingerprint rather than a request
-/// struct, matching its Tauri signature.
+// These commands take bare arguments rather than a request struct, matching
+// their Tauri signatures.
+
 #[derive(Debug, Deserialize)]
 struct WalletConfigRequest {
     fingerprint: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct AddressRequest {
+    address: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MoveKeyRequest {
+    fingerprint: u32,
+    index: u32,
 }
 
 fn decode<T: DeserializeOwned>(payload: &str) -> Result<T, JsValue> {
