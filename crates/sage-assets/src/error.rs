@@ -1,7 +1,6 @@
 use chia_protocol::Bytes32;
 use thiserror::Error;
 
-#[cfg(feature = "native")]
 use crate::ThumbnailError;
 
 #[derive(Debug, Error)]
@@ -21,9 +20,9 @@ pub enum UriError {
     #[error("No URIs provided")]
     NoUris,
 
-    // Thumbnails are generated with image codecs that only the native build
-    // links in.
-    #[cfg(feature = "native")]
+    #[error("Timed out fetching the URI")]
+    Timeout,
+
     #[error("Failed to create thumbnail: {0}")]
     Thumbnail(#[from] ThumbnailError),
 }

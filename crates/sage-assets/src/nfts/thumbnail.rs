@@ -2,6 +2,7 @@ use std::io::{self, Cursor};
 
 use image::{DynamicImage, ImageFormat, ImageReader};
 use thiserror::Error;
+#[cfg(not(target_arch = "wasm32"))]
 use webp::Decoder;
 
 use super::Thumbnail;
@@ -14,6 +15,7 @@ pub enum ThumbnailError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Failed to decode webp image")]
     Webp,
 }
@@ -42,6 +44,9 @@ pub fn thumbnail(bytes: &[u8], mime: &str) -> Result<Option<Thumbnail>, Thumbnai
 }
 
 fn load_image(bytes: &[u8], mime: &str) -> Result<Option<DynamicImage>, ThumbnailError> {
+    // libwebp is C, so it only builds natively; the browser reads webp through
+    // the image crate's own decoder instead, listed with the other formats.
+    #[cfg(not(target_arch = "wasm32"))]
     if mime == "image/webp" {
         return Ok(Some(
             Decoder::new(bytes)
@@ -66,6 +71,8 @@ fn mime_to_image_format(mime: &str) -> Option<ImageFormat> {
         "image/jpeg" => Some(ImageFormat::Jpeg),
         "image/bmp" => Some(ImageFormat::Bmp),
         "image/gif" => Some(ImageFormat::Gif),
+        #[cfg(target_arch = "wasm32")]
+        "image/webp" => Some(ImageFormat::WebP),
         _ => None,
     }
 }
