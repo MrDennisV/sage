@@ -25,10 +25,30 @@ try {
 
   const id = new URL(worker.url()).host;
   const page = await context.newPage();
+
+  // theme-o-rama's applyThemeIsolated writes `url(undefined)` for a theme with
+  // no background image, so every theme card on the settings page asks for a
+  // file that was never there. Desktop does the same; the request just fails
+  // visibly here because the extension origin serves nothing back.
+  const missingThemeImage = (url) => url?.endsWith('/undefined') ?? false;
+
+  // The blur that covers sensitive content registers a CSS paint worklet from
+  // a blob, which an extension's content security policy does not allow. The
+  // library falls back to a plain fill, so the content stays covered.
+  const blockedPaintWorklet = (text) =>
+    text.includes("Loading the script 'blob:") &&
+    text.includes('Content Security Policy');
+
   page.on('console', (m) => {
-    if (m.type() === 'error') failures.push(`[popup] ${m.text()}`);
+    if (m.type() !== 'error') return;
+    if (missingThemeImage(m.location()?.url)) return;
+    if (blockedPaintWorklet(m.text())) return;
+
+    failures.push(`[popup] ${m.text()}`);
   });
   page.on('requestfailed', (request) => {
+    if (missingThemeImage(request.url())) return;
+
     failures.push(`[request] ${request.url()} :: ${request.failure()?.errorText}`);
   });
 
