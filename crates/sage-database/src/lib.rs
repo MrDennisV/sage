@@ -7,6 +7,7 @@ mod serialized_primitives;
 mod migrations;
 #[cfg(feature = "sqlite")]
 mod query_check;
+mod resync;
 mod tables;
 mod utils;
 
@@ -17,6 +18,7 @@ pub use executor_sqlx::*;
 pub use maintenance::*;
 pub use serialized_primitives::*;
 pub use migrations::*;
+pub use resync::*;
 pub use tables::*;
 
 pub(crate) use utils::*;

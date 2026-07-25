@@ -830,6 +830,42 @@ fn unsynced_blocks() {
     let _ = sqlx::query_file!("queries/blocks/unsynced_blocks.sql", 0i64);
 }
 
+fn delete_mempool_items() {
+    let _ = sqlx::query_file!("queries/mempool_items/delete_mempool_items.sql");
+}
+
+fn clear_peak() {
+    let _ = sqlx::query_file!("queries/blocks/clear_peak.sql");
+}
+
+fn delete_coins() {
+    let _ = sqlx::query_file!("queries/coins/delete_coins.sql");
+}
+
+fn delete_assets() {
+    let _ = sqlx::query_file!("queries/assets/delete_assets.sql");
+}
+
+fn delete_collections() {
+    let _ = sqlx::query_file!("queries/collections/delete_collections.sql");
+}
+
+fn delete_files() {
+    let _ = sqlx::query_file!("queries/files/delete_files.sql");
+}
+
+fn delete_offers() {
+    let _ = sqlx::query_file!("queries/offers/delete_offers.sql");
+}
+
+fn delete_p2_puzzles() {
+    let _ = sqlx::query_file!("queries/p2_puzzles/delete_p2_puzzles.sql");
+}
+
+fn delete_blocks() {
+    let _ = sqlx::query_file!("queries/blocks/delete_blocks.sql");
+}
+
 fn insert_arbor_p2_puzzle() {
     let hash = hash();
     let hash2 = hash.clone();

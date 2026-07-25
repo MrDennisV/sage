@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE blocks SET is_peak = FALSE WHERE is_peak = TRUE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "e248d113402928d91fd9ac92f7d6b63e9e6d1fcedbc1c6e71923a105c1b26b33"
+}

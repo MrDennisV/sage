@@ -13,15 +13,15 @@ use rand_chacha::ChaCha20Rng;
 use sage_api::{
     GenerateMnemonic, GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse,
     GetSecretKey, GetSecretKeyResponse, ImportKey, KeyInfo, KeyKind, RenameKey, RenameKeyResponse,
-    SecretKeyInfo, SetWalletEmoji, SetWalletEmojiResponse,
+    Resync, ResyncResponse, SecretKeyInfo, SetWalletEmoji, SetWalletEmojiResponse,
 };
 #[cfg(feature = "native")]
 use sage_api::{
     DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, ImportKeyResponse, Login,
-    LoginResponse, Logout, LogoutResponse, Resync, ResyncResponse,
+    LoginResponse, Logout, LogoutResponse,
 };
 use sage_config::Wallet;
-use sage_database::{Database, Derivation, SqlExecutor};
+use sage_database::{Database, Derivation, ResyncRecords, SqlExecutor};
 #[cfg(feature = "native")]
 use sqlx::query;
 
@@ -295,6 +295,41 @@ impl<E: SqlExecutor> Sage<E> {
 
         Ok(())
     }
+
+    /// Clears the record groups a resync request asks for, so the next sync
+    /// rebuilds them from the network. Reclaiming the freed space is left to
+    /// the caller, since that is a file operation only native can do.
+    pub async fn resync_database(&self, db: &Database<E>, req: Resync) -> Result<ResyncResponse> {
+        let mut records = Vec::new();
+
+        if req.delete_coins {
+            records.push(ResyncRecords::Coins);
+        }
+
+        if req.delete_assets {
+            records.push(ResyncRecords::Assets);
+        }
+
+        if req.delete_files {
+            records.push(ResyncRecords::Files);
+        }
+
+        if req.delete_offers {
+            records.push(ResyncRecords::Offers);
+        }
+
+        if req.delete_addresses {
+            records.push(ResyncRecords::Addresses);
+        }
+
+        if req.delete_blocks {
+            records.push(ResyncRecords::Blocks);
+        }
+
+        db.resync(&records).await?;
+
+        Ok(ResyncResponse {})
+    }
 }
 
 #[cfg(feature = "native")]
@@ -323,45 +358,9 @@ impl Sage {
 
         let pool = self.connect_to_database(req.fingerprint).await?;
 
-        query!(
-            "
-            DELETE FROM mempool_items;
-            UPDATE blocks SET is_peak = FALSE WHERE is_peak = TRUE;
-            "
-        )
-        .execute(&pool)
-        .await?;
-
-        if req.delete_coins {
-            query!("DELETE FROM coins").execute(&pool).await?;
-        }
-
-        if req.delete_assets {
-            query!(
-                "
-                DELETE FROM assets WHERE id != 0;
-                DELETE FROM collections WHERE id != 0;
-                "
-            )
-            .execute(&pool)
+        let response = self
+            .resync_database(&Database::new(pool.clone()), req)
             .await?;
-        }
-
-        if req.delete_files {
-            query!("DELETE FROM files").execute(&pool).await?;
-        }
-
-        if req.delete_offers {
-            query!("DELETE FROM offers").execute(&pool).await?;
-        }
-
-        if req.delete_addresses {
-            query!("DELETE FROM p2_puzzles").execute(&pool).await?;
-        }
-
-        if req.delete_blocks {
-            query!("DELETE FROM blocks").execute(&pool).await?;
-        }
 
         // reclaim disk space after all those deletes
         query("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -376,7 +375,7 @@ impl Sage {
             self.switch_wallet().await?;
         }
 
-        Ok(ResyncResponse {})
+        Ok(response)
     }
 
     pub async fn import_key(&mut self, req: ImportKey) -> Result<ImportKeyResponse> {

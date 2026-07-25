@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM mempool_items",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "fe8fd1d0defb440e22ded5300c1cd7d329f7ae973bcd0a892cf9cdf3df2f1553"
+}
