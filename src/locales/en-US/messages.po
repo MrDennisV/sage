@@ -376,11 +376,11 @@ msgstr "Amount includes"
 msgid "Analyze Duration"
 msgstr "Analyze Duration"
 
-#: src/walletconnect/RequestDialog.tsx:567
+#: src/walletconnect/RequestDialog.tsx:605
 msgid "Approve"
 msgstr "Approve"
 
-#: src/walletconnect/RequestDialog.tsx:555
+#: src/walletconnect/RequestDialog.tsx:593
 msgid "Approving"
 msgstr "Approving"
 
@@ -1007,8 +1007,8 @@ msgid "Connected to {totalPeersCount} peers"
 msgstr "Connected to {totalPeersCount} peers"
 
 #: src/walletconnect/RequestDialog.tsx:400
-msgid "Connecting as"
-msgstr "Connecting as"
+#~ msgid "Connecting as"
+#~ msgstr "Connecting as"
 
 #: src/components/Nav.tsx:192
 msgid "connecting..."
@@ -1187,9 +1187,9 @@ msgstr "Creating Offers"
 msgid "Currency Symbol"
 msgstr "Currency Symbol"
 
-#: src/walletconnect/RequestDialog.tsx:376
-#~ msgid "Current account"
-#~ msgstr "Current account"
+#: src/walletconnect/RequestDialog.tsx:421
+msgid "Current account"
+msgstr "Current account"
 
 #: src/pages/Settings.tsx:1394
 msgid "Current database statistics and health information"
@@ -2122,8 +2122,8 @@ msgid "Issue Token"
 msgstr "Issue Token"
 
 #: src/walletconnect/RequestDialog.tsx:416
-msgid "It can't move funds. Every transaction needs approval."
-msgstr "It can't move funds. Every transaction needs approval."
+#~ msgid "It can't move funds. Every transaction needs approval."
+#~ msgstr "It can't move funds. Every transaction needs approval."
 
 #: src/walletconnect/RequestDialog.tsx:405
 #~ msgid "It cannot move your funds without you approving each transaction."
@@ -2719,6 +2719,10 @@ msgstr "Normalize Profile"
 msgid "Normalize Profiles"
 msgstr "Normalize Profiles"
 
+#: src/walletconnect/RequestDialog.tsx:411
+msgid "Not a secure connection"
+msgstr "Not a secure connection"
+
 #: src/components/AssignNftDialog.tsx:59
 #: src/components/ClawbackCoinsCard.tsx:198
 #: src/components/ClawbackCoinsCard.tsx:243
@@ -3293,7 +3297,7 @@ msgstr "Refresh Info"
 msgid "Refreshing token info..."
 msgstr "Refreshing token info..."
 
-#: src/walletconnect/RequestDialog.tsx:550
+#: src/walletconnect/RequestDialog.tsx:588
 msgid "Reject"
 msgstr "Reject"
 
@@ -3316,6 +3320,10 @@ msgstr "Rename Profile"
 #: src/components/WalletCard.tsx:410
 msgid "Rename Wallet"
 msgstr "Rename Wallet"
+
+#: src/walletconnect/RequestDialog.tsx:453
+msgid "Request approval for transactions"
+msgstr "Request approval for transactions"
 
 #: src/components/OfferCard.tsx:218
 #: src/pages/MakeOffer.tsx:156
@@ -4142,8 +4150,8 @@ msgid "The offer to fulfill the swap has been created successfully. It will now 
 msgstr "The offer to fulfill the swap has been created successfully. It will now be executed on Dexie and imported on the offers page."
 
 #: src/walletconnect/RequestDialog.tsx:410
-msgid "The site can see your balance and activity, and ask you to approve transactions."
-msgstr "The site can see your balance and activity, and ask you to approve transactions."
+#~ msgid "The site can see your balance and activity, and ask you to approve transactions."
+#~ msgstr "The site can see your balance and activity, and ask you to approve transactions."
 
 #: src/pages/Addresses.tsx:78
 msgid "The wallet generates a new address after each transaction. Old ones stay valid."
@@ -4321,12 +4329,16 @@ msgid "This profile will be transferred to the address below."
 msgstr "This profile will be transferred to the address below."
 
 #: src/walletconnect/RequestDialog.tsx:393
-msgid "This site is not using a secure connection."
-msgstr "This site is not using a secure connection."
+#~ msgid "This site is not using a secure connection."
+#~ msgstr "This site is not using a secure connection."
 
 #: src/walletconnect/RequestDialog.tsx:384
 #~ msgid "This site will be able to"
 #~ msgstr "This site will be able to"
+
+#: src/walletconnect/RequestDialog.tsx:438
+msgid "This site would like to"
+msgstr "This site would like to"
 
 #: src/pages/Login.tsx:655
 #~ msgid "This wallet requires a database migration to continue. Would you like to delete the wallet's data or cancel the login? The keys will not be affected."
@@ -5006,6 +5018,10 @@ msgstr "View options"
 #: src/components/TokenColumns.tsx:72
 #~ msgid "View Unknown CAT token details"
 #~ msgstr "View Unknown CAT token details"
+
+#: src/walletconnect/RequestDialog.tsx:446
+msgid "View your wallet balance and activity"
+msgstr "View your wallet balance and activity"
 
 #: src/pages/Settings.tsx:1629
 msgid "WAL Checkpoint Duration"
