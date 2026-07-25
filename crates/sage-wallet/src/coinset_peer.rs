@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::prelude::*;
 use chia_protocol::{CoinStateFilters, RespondPuzzleState, TransactionAck};
 use chia_sdk_coinset::{ChiaRpcClient, CoinRecord, CoinsetClient};
@@ -107,7 +109,7 @@ impl PeerApi for CoinsetPeer {
         header_hash: Bytes32,
         filters: CoinStateFilters,
     ) -> Result<RespondPuzzleState, WalletError> {
-        let response = self
+        let mut coin_records = self
             .client
             .get_coin_records_by_puzzle_hashes(
                 puzzle_hashes.clone(),
@@ -116,13 +118,38 @@ impl PeerApi for CoinsetPeer {
                 Some(filters.include_spent),
             )
             .await
-            .map_err(coinset_error("get_coin_records_by_puzzle_hashes"))?;
-
-        let coin_states = response
+            .map_err(coinset_error("get_coin_records_by_puzzle_hashes"))?
             .coin_records
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        // A token, NFT or DID coin is locked to a puzzle the wallet does not
+        // own, so looking up its puzzle hash finds nothing; what ties it to the
+        // wallet is the hint its parent spend leaves behind. The full node
+        // answers both from one request, which is why the caller asks for
+        // hinted coins and expects them in the same batch.
+        if filters.include_hinted {
+            let hinted = self
+                .client
+                .get_coin_records_by_hints(
+                    puzzle_hashes.clone(),
+                    previous_height,
+                    None,
+                    Some(filters.include_spent),
+                )
+                .await
+                .map_err(coinset_error("get_coin_records_by_hints"))?
+                .coin_records
+                .unwrap_or_default();
+
+            coin_records.extend(hinted);
+        }
+
+        let mut seen = HashSet::new();
+
+        let coin_states = coin_records
             .iter()
             .map(to_coin_state)
+            .filter(|state| seen.insert(state.coin.coin_id()))
             .collect();
 
         // The response is not paginated, so report the cursor as finished at
