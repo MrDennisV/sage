@@ -421,15 +421,14 @@ function ConnectDialog({ peerName }: { peerName?: string | null }) {
         <SiteMark origin={origin} host={host} />
         <div>
           <div className='text-lg font-medium font-mono break-all'>{host}</div>
-          <div
-            className={`text-sm break-all ${insecure ? 'text-destructive' : 'text-muted-foreground'}`}
-          >
-            {insecure ? (
-              <Trans>Not a secure connection</Trans>
-            ) : (
-              <span className='font-mono'>{origin}</span>
-            )}
+          <div className='text-sm text-muted-foreground font-mono break-all'>
+            {origin}
           </div>
+          {insecure && (
+            <div className='text-sm text-destructive mt-1'>
+              <Trans>Not a secure connection</Trans>
+            </div>
+          )}
         </div>
       </div>
 
