@@ -415,19 +415,7 @@ impl<E: SqlExecutor> Sage<E> {
     pub fn wallet_db_path(&self, fingerprint: u32) -> Result<PathBuf> {
         let path = self.path.join("wallets").join(fingerprint.to_string());
         fs::create_dir_all(&path)?;
-        let network_id = self
-            .wallet_config
-            .wallets
-            .iter()
-            .find_map(|wallet| {
-                if wallet.fingerprint == fingerprint {
-                    wallet.network.clone()
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| self.network_id());
-        let path = path.join(format!("{network_id}.sqlite"));
+        let path = path.join(format!("{}.sqlite", self.network_id_of(fingerprint)));
         Ok(path)
     }
 

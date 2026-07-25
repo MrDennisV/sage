@@ -5,9 +5,11 @@ import init, {
   sage_handle,
   sage_init,
   sage_login,
+  sage_mounted,
   sage_prepare_database,
   sage_session,
   sage_sync_once,
+  sage_wallet_network,
 } from '../extension/wasm/sage_wasm';
 
 import { broadcastEvent, installDappBridge } from './dapp-bridge';
@@ -71,19 +73,50 @@ function session(): Session {
   return JSON.parse(sage_session());
 }
 
+/** Points the SQL bridge at a wallet's database, applying the schema if new. */
+async function mountDatabase(fingerprint: number, networkId: string) {
+  if (await selectDatabase(databaseKey(fingerprint, networkId))) {
+    await sage_prepare_database();
+  }
+
+  sage_mounted(fingerprint);
+}
+
 /** Points the SQL bridge at the database for the active wallet and network. */
 async function useSessionDatabase(): Promise<boolean> {
   const { fingerprint, network_id: networkId } = session();
 
   if (fingerprint === null) return false;
 
-  if (await selectDatabase(databaseKey(fingerprint, networkId))) {
-    await sage_prepare_database();
-  }
-
+  await mountDatabase(fingerprint, networkId);
   await sage_login(fingerprint);
 
   return true;
+}
+
+// Resyncing or emptying a database acts on a wallet the user names, which is
+// not always the one they are signed into: both are offered from the wallet
+// list. Desktop opens that wallet's file by path; here only one database is
+// mounted at a time, so the named one takes its place for the command and the
+// session's own is restored afterwards.
+const WALLET_COMMANDS = new Set(['resync', 'delete_database']);
+
+async function withWalletDatabase<T>(
+  fingerprint: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  const { fingerprint: active } = session();
+
+  if (active === fingerprint) return work();
+
+  try {
+    await mountDatabase(fingerprint, sage_wallet_network(fingerprint));
+
+    return await work();
+  } finally {
+    await flushDb();
+    await useSessionDatabase();
+  }
 }
 
 function boot(): Promise<void> {
@@ -185,7 +218,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // dispatch takes the request struct itself.
     const request = args && 'req' in args ? args.req : args;
 
-    const response = await dispatch(cmd, request);
+    const fingerprint = (request as { fingerprint?: number } | undefined)
+      ?.fingerprint;
+
+    const response =
+      WALLET_COMMANDS.has(cmd) && typeof fingerprint === 'number'
+        ? await withWalletDatabase(fingerprint, () => dispatch(cmd, request))
+        : await dispatch(cmd, request);
 
     if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
       await useSessionDatabase();

@@ -106,19 +106,53 @@ try {
 
   console.log(`resynced, ${await waitForDerivations('resync')} derivation(s)`);
 
-  // Only the active wallet's database is mounted, so another fingerprint has
-  // to be refused rather than silently doing nothing.
-  const inactive = fingerprint > 1 ? fingerprint - 1 : fingerprint + 1;
-  const foreign = await send('resync', { fingerprint: inactive });
+  // Resyncing is offered from the wallet list, so it has to work on a wallet
+  // the user is not signed into. Only one database is mounted at a time, so
+  // the named wallet's takes its place for the command.
+  const second = await check('generate_mnemonic', { use_24_words: true });
+  const other = await check('import_key', {
+    name: 'Keys Test Second',
+    key: second.mnemonic,
+    save_secrets: true,
+    login: false,
+  });
 
-  if (!foreign?.error) {
-    throw new Error('resyncing an inactive wallet unexpectedly succeeded');
+  await check('login', { fingerprint });
+  await check('resync', {
+    fingerprint: other.fingerprint,
+    delete_coins: true,
+    delete_blocks: true,
+    delete_addresses: true,
+  });
+
+  const stillActive = await check('get_key', {});
+
+  if (stillActive.key?.fingerprint !== fingerprint) {
+    throw new Error(
+      `resyncing another wallet left ${stillActive.key?.fingerprint} signed in`,
+    );
   }
 
-  if (!foreign.error.includes(String(inactive))) {
-    throw new Error(`inactive wallet error does not name it: ${foreign.error}`);
+  // Clearing the other wallet's addresses must not have reached this one's,
+  // which is what a resync run against the mounted database would have done.
+  const kept = await check('get_derivations', { offset: 0, limit: 1 });
+
+  if (kept.derivations.length === 0) {
+    throw new Error('resyncing another wallet cleared this one instead');
   }
-  console.log(`inactive wallet refused: ${foreign.error}`);
+  console.log(`resynced wallet ${other.fingerprint}, this one untouched`);
+
+  // A fingerprint no key answers to has to be refused, rather than quietly
+  // building a database for a wallet that does not exist.
+  const unknown = fingerprint > 1 ? fingerprint - 1 : fingerprint + 1;
+  const refused = await send('resync', { fingerprint: unknown });
+
+  if (!refused?.error) {
+    throw new Error('resyncing an unknown wallet unexpectedly succeeded');
+  }
+  console.log(`unknown wallet refused: ${refused.error}`);
+
+  await check('delete_key', { fingerprint: other.fingerprint });
 
   const { key } = await check('get_key', { fingerprint });
   await check('delete_database', { fingerprint, network: key.network_id });

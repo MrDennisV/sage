@@ -37,6 +37,18 @@ impl<E: SqlExecutor> Sage<E> {
         self.wallet_config.defaults
     }
 
+    /// The network a wallet uses, which is its own override when it has one and
+    /// the default otherwise. Each wallet and network pair keeps its own
+    /// database, so this is what names it.
+    pub fn network_id_of(&self, fingerprint: u32) -> String {
+        self.wallet_config
+            .wallets
+            .iter()
+            .find(|wallet| wallet.fingerprint == fingerprint)
+            .and_then(|wallet| wallet.network.clone())
+            .unwrap_or_else(|| self.network_id())
+    }
+
     /// The stored settings for a wallet, whether or not it is the active one.
     pub fn wallet_config_of(&self, fingerprint: u32) -> Option<Wallet> {
         self.wallet_config

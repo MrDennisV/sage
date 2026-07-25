@@ -1,4 +1,8 @@
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    path::PathBuf,
+    rc::Rc,
+};
 
 use sage::Sage;
 use sage_database::Database;
@@ -66,6 +70,46 @@ pub fn sage_session() -> Result<String, JsValue> {
         network_id: sage.network_id(),
     })
     .map_err(js_error)
+}
+
+/// The network a wallet keeps its database under, which is its own override
+/// when it has one and the default otherwise. Refuses a fingerprint no key
+/// answers to, since mounting its database would create one for a wallet that
+/// does not exist.
+#[wasm_bindgen]
+pub fn sage_wallet_network(fingerprint: u32) -> Result<String, JsValue> {
+    let cell = sage_cell();
+    let guard = cell.borrow();
+    let sage = guard.as_ref().ok_or_else(not_initialized)?;
+
+    if !sage.keychain.contains(fingerprint) {
+        return Err(crate::sage_error(sage::Error::UnknownFingerprint));
+    }
+
+    Ok(sage.network_id_of(fingerprint))
+}
+
+thread_local! {
+    /// The wallet whose database the caller has mounted. Only one is mounted at
+    /// a time, so a command naming a wallet has to be checked against this
+    /// before it writes: acting on the wrong database would discard records
+    /// that belong to another wallet.
+    static MOUNTED: Cell<Option<u32>> = const { Cell::new(None) };
+}
+
+/// Records which wallet's database the caller just selected.
+#[wasm_bindgen]
+pub fn sage_mounted(fingerprint: u32) {
+    MOUNTED.set(Some(fingerprint));
+}
+
+/// Refuses a request that names a wallet other than the mounted one.
+pub(crate) fn require_mounted(fingerprint: u32) -> Result<(), JsValue> {
+    if MOUNTED.get() == Some(fingerprint) {
+        return Ok(());
+    }
+
+    Err(crate::sage_error(sage::Error::InactiveWallet(fingerprint)))
 }
 
 /// Applies the schema migrations to the currently selected database. The

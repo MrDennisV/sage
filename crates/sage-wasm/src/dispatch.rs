@@ -14,7 +14,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     BrowserExecutor,
-    bootstrap::{already_busy, not_initialized, sage_cell},
+    bootstrap::{already_busy, not_initialized, require_mounted, sage_cell},
     js_error, sage_error,
 };
 
@@ -106,7 +106,7 @@ async fn browser_command(
     let response = match command {
         "resync" => {
             let req: Resync = decode(payload)?;
-            active_wallet(sage, req.fingerprint)?;
+            require_mounted(req.fingerprint)?;
 
             let res = sage
                 .resync_database(&Database::from_executor(BrowserExecutor), req)
@@ -117,7 +117,7 @@ async fn browser_command(
         }
         "delete_database" => {
             let req: DeleteDatabase = decode(payload)?;
-            active_wallet(sage, req.fingerprint)?;
+            require_mounted(req.fingerprint)?;
 
             // Desktop removes the network's SQLite file. Here the database is
             // mounted rather than opened by path, so emptying it means dropping
@@ -173,16 +173,6 @@ async fn browser_command(
     };
 
     Ok(Some(response))
-}
-
-/// Only the active wallet's database is mounted, so a request naming another
-/// wallet has to be refused rather than quietly acting on the wrong one.
-fn active_wallet(sage: &Sage<BrowserExecutor>, fingerprint: u32) -> Result<(), JsValue> {
-    if sage.config.global.fingerprint == Some(fingerprint) {
-        return Ok(());
-    }
-
-    Err(sage_error(sage::Error::InactiveWallet(fingerprint)))
 }
 
 /// The endpoints dApps reach through `window.chia`. They are not part of the
