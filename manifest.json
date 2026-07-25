@@ -12,6 +12,7 @@
   ],
   "host_permissions": [
     "https://*.coinset.org/*",
+    "https://offercodes.chia.net/*",
     "https://api.dexie.space/*",
     "https://api-testnet.dexie.space/*",
     "https://icons.dexie.space/*",

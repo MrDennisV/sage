@@ -1,5 +1,6 @@
-// Exercises the key lifecycle the way the interface does: create, list,
-// delete, and confirm that a failure comes back with a readable message.
+// Exercises the key lifecycle the way the interface does: create, list, wipe
+// the wallet's data, delete, and confirm that a failure comes back with a
+// readable message.
 import { chromium } from 'playwright';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
@@ -74,6 +75,57 @@ try {
     throw new Error(`duplicate error lacks kind/reason: ${duplicate.error}`);
   }
   console.log(`duplicate rejected as ${parsed.kind}: ${parsed.reason}`);
+
+  // Derivations are the cheapest proof that the wallet still works: nothing
+  // creates them but a sync, so they disappearing and coming back shows the
+  // database was really emptied and really refilled.
+  const derivations = async () =>
+    (await check('get_derivations', { hardened: false, offset: 0, limit: 5 }))
+      .total;
+
+  const waitForDerivations = async (label) => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const total = await derivations();
+      if (total > 0) return total;
+      await page.waitForTimeout(1000);
+    }
+    throw new Error(`derivations were never regenerated after ${label}`);
+  };
+
+  console.log(`synced ${await waitForDerivations('login')} derivation(s)`);
+
+  await check('resync', {
+    fingerprint,
+    delete_coins: true,
+    delete_assets: true,
+    delete_files: true,
+    delete_offers: true,
+    delete_addresses: true,
+    delete_blocks: true,
+  });
+
+  console.log(`resynced, ${await waitForDerivations('resync')} derivation(s)`);
+
+  // Only the active wallet's database is mounted, so another fingerprint has
+  // to be refused rather than silently doing nothing.
+  const inactive = fingerprint > 1 ? fingerprint - 1 : fingerprint + 1;
+  const foreign = await send('resync', { fingerprint: inactive });
+
+  if (!foreign?.error) {
+    throw new Error('resyncing an inactive wallet unexpectedly succeeded');
+  }
+
+  if (!foreign.error.includes(String(inactive))) {
+    throw new Error(`inactive wallet error does not name it: ${foreign.error}`);
+  }
+  console.log(`inactive wallet refused: ${foreign.error}`);
+
+  const { key } = await check('get_key', { fingerprint });
+  await check('delete_database', { fingerprint, network: key.network_id });
+
+  console.log(
+    `database emptied, ${await waitForDerivations('delete_database')} derivation(s)`,
+  );
 
   await check('delete_key', { fingerprint });
   const { keys } = await check('get_keys');

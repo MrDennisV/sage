@@ -40,15 +40,20 @@ const FLUSH_COMMANDS = new Set([
   'set_network',
   'send_xch',
   'send_cat',
+  'resync',
+  'delete_database',
 ]);
 
-// Commands that change which wallet or network is active, so the matching
-// database has to be selected before the next query runs.
+// Commands after which the wallet has to be rebuilt over its database: either
+// the active wallet or network changed, or the database was emptied and the
+// records have to be synced again.
 const SESSION_COMMANDS = new Set([
   'set_network',
   'set_network_override',
   'switch_wallet',
   'import_key',
+  'resync',
+  'delete_database',
 ]);
 
 // Session changes that connected websites have to hear about, because their
