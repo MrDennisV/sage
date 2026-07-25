@@ -8,7 +8,7 @@ use futures_util::future::join_all;
 use sage_api::NetworkKind;
 use sage_wallet::{
     CoinsetPeer, EventSink, SyncEvent, Wallet, add_new_subscriptions, apply_synced_coins,
-    fetch_puzzles, refresh_cat_catalog_page, sync_wallet,
+    download_nft_uris, fetch_puzzles, refresh_cat_catalog_page, sync_wallet,
 };
 use tracing::{debug, warn};
 use wasm_bindgen::prelude::*;
@@ -42,10 +42,27 @@ impl EventSink for CollectorSink {
     async fn subscribe_coins(&self, _coin_ids: Vec<Bytes32>) {}
 }
 
+thread_local! {
+    /// Whether the last pass stopped on its time budget rather than because it
+    /// ran out of work. Each stage of a pass is bounded so a command arriving
+    /// mid-pass isn't left waiting, which means a wallet with a lot to catch up
+    /// on needs several passes; this is what tells the caller to start the next
+    /// one now instead of waiting for the timer.
+    static MORE_WORK: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether the last sync pass left work behind.
+#[wasm_bindgen]
+pub fn sage_sync_pending() -> bool {
+    MORE_WORK.get()
+}
+
 /// Runs one full sync pass against the Coinset API and returns the collected
 /// sync events as a JSON array in the `sage_api::SyncEvent` wire shape.
 #[wasm_bindgen]
 pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
+    MORE_WORK.set(false);
+
     // Clone the wallet handle and peer out of the RefCell before any await, so
     // commands arriving during the sync aren't rejected as busy.
     let (wallet, peer, catalog_network) = {
@@ -85,6 +102,10 @@ pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
 
     identify_puzzles(&wallet, &peer, &sink).await?;
 
+    // An unknown network has no MintGarden thumbnails to fall back on, which is
+    // the only thing the flag decides here; the content itself still downloads.
+    download_nft_content(&wallet, catalog_network.unwrap_or(false), &sink).await;
+
     if let Some(testnet) = catalog_network {
         refresh_cat_catalog(&wallet, testnet, &sink).await;
     }
@@ -118,7 +139,7 @@ async fn identify_puzzles(
     let mut subscriptions = Vec::new();
     let deadline = js_sys::Date::now() + PUZZLE_SYNC_BUDGET_MS;
 
-    while js_sys::Date::now() < deadline {
+    loop {
         let rows = wallet
             .db
             .unsynced_coins(BATCH_SIZE)
@@ -126,6 +147,11 @@ async fn identify_puzzles(
             .map_err(js_error)?;
 
         if rows.is_empty() {
+            break;
+        }
+
+        if js_sys::Date::now() >= deadline {
+            MORE_WORK.set(true);
             break;
         }
 
@@ -188,6 +214,46 @@ async fn identify_puzzles(
     Ok(())
 }
 
+/// How many URIs to download per round. Small, because each one is a whole
+/// file and the pass holds the wallet while it runs.
+const DOWNLOAD_BATCH_SIZE: u32 = 4;
+
+/// How long one pass may spend downloading NFT content.
+const DOWNLOAD_BUDGET_MS: f64 = 3_000.0;
+
+/// Downloads what an NFT points at, which is where its name, description,
+/// collection and picture come from. Natively this is a queue of its own; here
+/// it shares the sync pass, so it works in small rounds until its budget runs
+/// out and the next pass carries on with whatever is still unchecked.
+async fn download_nft_content(
+    wallet: &Arc<Wallet<BrowserExecutor>>,
+    testnet: bool,
+    sink: &CollectorSink,
+) {
+    let deadline = js_sys::Date::now() + DOWNLOAD_BUDGET_MS;
+    let mut downloaded = false;
+
+    loop {
+        if js_sys::Date::now() >= deadline {
+            MORE_WORK.set(true);
+            break;
+        }
+
+        match download_nft_uris(&wallet.db, testnet, DOWNLOAD_BATCH_SIZE).await {
+            Ok(true) => downloaded = true,
+            Ok(false) => break,
+            Err(error) => {
+                warn!("Failed to download NFT content: {error}");
+                break;
+            }
+        }
+    }
+
+    if downloaded {
+        sink.send_event(SyncEvent::NftData).await;
+    }
+}
+
 thread_local! {
     /// The page of the token catalog to ask for next, and when the listing was
     /// last walked all the way through. Both start over when the worker
@@ -223,7 +289,12 @@ async fn refresh_cat_catalog(
     let deadline = js_sys::Date::now() + CATALOG_BUDGET_MS;
     let mut recorded = false;
 
-    while js_sys::Date::now() < deadline {
+    loop {
+        if js_sys::Date::now() >= deadline {
+            MORE_WORK.set(true);
+            break;
+        }
+
         let page = CATALOG_PAGE.get();
 
         match refresh_cat_catalog_page(&wallet.db, testnet, page).await {

@@ -9,6 +9,7 @@ import init, {
   sage_prepare_database,
   sage_session,
   sage_sync_once,
+  sage_sync_pending,
   sage_wallet_network,
 } from '../extension/wasm/sage_wasm';
 
@@ -177,16 +178,37 @@ async function flushAll(): Promise<void> {
   await flushDb();
 }
 
-async function syncOnce(): Promise<void> {
-  const events = await exclusive(async () => {
+function broadcastSyncEvent(data: unknown) {
+  chrome.runtime.sendMessage({ type: 'SYNC_EVENT', data }).catch(() => {
+    // No listeners while the popup is closed.
+  });
+}
+
+/**
+ * Whether a command broadcasts, which is what leaves a pending transaction
+ * behind for the interface to show. Building a transaction without submitting
+ * it changes nothing yet, so it does not count.
+ */
+function submits(cmd: string, request: unknown): boolean {
+  if (cmd === 'submit_transaction') return true;
+
+  return (
+    typeof request === 'object' &&
+    request !== null &&
+    (request as { auto_submit?: boolean }).auto_submit === true
+  );
+}
+
+async function syncPass(): Promise<boolean> {
+  const { events, pending } = await exclusive(async () => {
     await boot();
 
-    if (session().fingerprint === null) return [];
+    if (session().fingerprint === null) return { events: [], pending: false };
 
-    const collected: unknown[] = JSON.parse(await sage_sync_once(true));
+    const events: unknown[] = JSON.parse(await sage_sync_once(true));
     await flushDb();
 
-    return collected;
+    return { events, pending: sage_sync_pending() };
   });
 
   for (const event of events) {
@@ -195,6 +217,31 @@ async function syncOnce(): Promise<void> {
       .catch(() => {
         // No listeners while the popup is closed.
       });
+  }
+
+  return pending;
+}
+
+// A pass bounds each stage so a command arriving mid-sync isn't left waiting,
+// which means a wallet with a lot to catch up on needs several. Waiting for the
+// timer between them would stretch a first sync over many minutes, so passes
+// follow each other while there is work left. The cap is what keeps a stage
+// that always reports work from taking the worker over entirely.
+const MAX_CHAINED_PASSES = 20;
+
+let syncing = false;
+
+async function syncOnce(): Promise<void> {
+  if (syncing) return;
+
+  syncing = true;
+
+  try {
+    for (let pass = 0; pass < MAX_CHAINED_PASSES; pass++) {
+      if (!(await syncPass())) return;
+    }
+  } finally {
+    syncing = false;
   }
 }
 
@@ -234,10 +281,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await flushAll();
     }
 
+    if (submits(cmd, request)) await flushDb();
+
     return response;
   })
     .then((response) => {
-      if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
+      // Submitting records the transaction as pending, and the wallet shows it
+      // straight away. Nothing drives the interface here the way the desktop
+      // sync manager does, so the worker says so itself rather than leaving it
+      // to look idle until the next pass.
+      const request = args && 'req' in args ? args.req : args;
+      const broadcast = submits(cmd, request);
+
+      if (broadcast) {
+        broadcastSyncEvent({ type: 'coin_state' });
+      }
+
+      if (SESSION_COMMANDS.has(cmd) || cmd === 'login' || broadcast) {
         syncOnce().catch((error) => console.error('sync failed', error));
       }
 
