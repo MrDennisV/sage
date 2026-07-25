@@ -1,14 +1,14 @@
 use std::cell::Cell;
 
-use chia_sdk_utils::Address;
 use sage::Sage;
 use sage_api::{
-    DeleteKey, DeleteKeyResponse, GetPeersResponse, GetUserThemesResponse, ImportKey,
-    ImportKeyResponse, Login, LoginResponse,
-    Logout, LogoutResponse, SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse,
-    SetNetworkResponse,
+    DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, GetPeersResponse,
+    ImportKey, ImportKeyResponse, Login, LoginResponse, Logout, LogoutResponse, Resync,
+    SetChangeAddress, SetChangeAddressResponse, SetNetwork, SetNetworkOverride,
+    SetNetworkOverrideResponse, SetNetworkResponse,
 };
 use sage_api_macro::impl_endpoints_portable;
+use sage_database::Database;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use wasm_bindgen::prelude::*;
 
@@ -57,6 +57,10 @@ async fn handle(
         return Ok(response);
     }
 
+    if let Some(response) = browser_command(sage, command, payload).await? {
+        return Ok(response);
+    }
+
     if let Some(response) = wallet_connect_command(sage, command, payload).await? {
         return Ok(response);
     }
@@ -76,8 +80,8 @@ async fn handle(
             create_transaction, sign_coin_spends, view_coin_spends, submit_transaction, make_offer,
             take_offer, combine_offers, view_offer, import_offer, get_offers, get_offers_for_asset,
             get_offer, delete_offer, cancel_offer, cancel_offers, get_networks, get_network,
-            set_delta_sync, set_delta_sync_override, set_network_api_url, update_cat, update_did,
-            update_option,
+            set_delta_sync, set_delta_sync_override, set_network_api_url, update_cat, resync_cat,
+            update_did, update_option,
             update_nft, update_nft_collection, redownload_nft, increase_derivation_index
         )
         Ok(match command {
@@ -89,6 +93,96 @@ async fn handle(
             _ => return Err(JsValue::from_str(&format!("unsupported command: {command}"))),
         })
     }
+}
+
+/// Commands whose browser implementation differs from the desktop one, because
+/// what they act on is a file there and something else here: the mounted
+/// database, the key-value store, or a plain HTTPS request.
+async fn browser_command(
+    sage: &mut Sage<BrowserExecutor>,
+    command: &str,
+    payload: &str,
+) -> Result<Option<String>, JsValue> {
+    let response = match command {
+        "resync" => {
+            let req: Resync = decode(payload)?;
+            active_wallet(sage, req.fingerprint)?;
+
+            let res = sage
+                .resync_database(&Database::from_executor(BrowserExecutor), req)
+                .await
+                .map_err(sage_error)?;
+
+            encode(&res)?
+        }
+        "delete_database" => {
+            let req: DeleteDatabase = decode(payload)?;
+            active_wallet(sage, req.fingerprint)?;
+
+            // Desktop removes the network's SQLite file. Here the database is
+            // mounted rather than opened by path, so emptying it means dropping
+            // the schema and building it again.
+            sage_database::drop_schema(&BrowserExecutor)
+                .await
+                .map_err(|error| sage_error(error.into()))?;
+
+            sage_database::run_migrations(&BrowserExecutor)
+                .await
+                .map_err(|error| sage_error(error.into()))?;
+
+            encode(&DeleteDatabaseResponse {})?
+        }
+        "set_change_address" => {
+            let req: SetChangeAddress = decode(payload)?;
+            sage.set_change_address_config(req).map_err(sage_error)?;
+
+            // The change address is baked into the wallet when it is built, so
+            // rebuild it the way logging in does for the new one to take hold.
+            if let Some(fingerprint) = sage.config.global.fingerprint {
+                sage.login_with_database(fingerprint, Database::from_executor(BrowserExecutor))
+                    .map_err(sage_error)?;
+            }
+
+            encode(&SetChangeAddressResponse {})?
+        }
+        // Themes are stored per key rather than per directory, so these are not
+        // part of the generated endpoint set even though the requests are.
+        "get_user_theme" => encode(&sage.get_user_theme(decode(payload)?).map_err(sage_error)?)?,
+        "get_user_themes" => encode(&sage.get_user_themes(decode(payload)?).map_err(sage_error)?)?,
+        "save_user_theme" => encode(
+            &sage
+                .save_user_theme(decode(payload)?)
+                .await
+                .map_err(sage_error)?,
+        )?,
+        "delete_user_theme" => encode(
+            &sage
+                .delete_user_theme(decode(payload)?)
+                .map_err(sage_error)?,
+        )?,
+        "download_cni_offercode" => {
+            let req: OfferCodeRequest = decode(payload)?;
+
+            encode(
+                &sage::download_cni_offercode(req.code)
+                    .await
+                    .map_err(sage_error)?,
+            )?
+        }
+        _ => return Ok(None),
+    };
+
+    Ok(Some(response))
+}
+
+/// Only the active wallet's database is mounted, so a request naming another
+/// wallet has to be refused rather than quietly acting on the wrong one.
+fn active_wallet(sage: &Sage<BrowserExecutor>, fingerprint: u32) -> Result<(), JsValue> {
+    if sage.config.global.fingerprint == Some(fingerprint) {
+        return Ok(());
+    }
+
+    Err(sage_error(sage::Error::InactiveWallet(fingerprint)))
 }
 
 /// The endpoints dApps reach through `window.chia`. They are not part of the
@@ -174,22 +268,13 @@ fn session_command(
         }
         "set_network" => {
             let req: SetNetwork = decode(payload)?;
-            sage.config.network.default_network.clone_from(&req.name);
-            sage.save_config().map_err(sage_error)?;
+            sage.select_network(req.name).map_err(sage_error)?;
             encode(&SetNetworkResponse {})?
         }
         "set_network_override" => {
             let req: SetNetworkOverride = decode(payload)?;
-
-            let wallet = sage
-                .wallet_config
-                .wallets
-                .iter_mut()
-                .find(|wallet| wallet.fingerprint == req.fingerprint)
-                .ok_or_else(|| sage_error(sage::Error::UnknownFingerprint))?;
-
-            wallet.network = req.name;
-            sage.save_config().map_err(sage_error)?;
+            sage.override_wallet_network(req.fingerprint, req.name)
+                .map_err(sage_error)?;
             encode(&SetNetworkOverrideResponse {})?
         }
         // The wallet is rebuilt by the service worker's `sage_login` call, so
@@ -198,42 +283,22 @@ fn session_command(
         "switch_wallet" | "initialize" => encode(&())?,
         "validate_address" => {
             let req: AddressRequest = decode(payload)?;
-            let valid = Address::decode(&req.address)
-                .is_ok_and(|address| address.prefix == sage.network().prefix());
-            encode(&valid)?
+            encode(&sage.is_valid_address(&req.address))?
         }
         "move_key" => {
             let req: MoveKeyRequest = decode(payload)?;
-
-            let index = sage
-                .wallet_config
-                .wallets
-                .iter()
-                .position(|wallet| wallet.fingerprint == req.fingerprint)
-                .ok_or_else(|| sage_error(sage::Error::UnknownFingerprint))?;
-
-            let wallet = sage.wallet_config.wallets.remove(index);
-            sage.wallet_config.wallets.insert(req.index as usize, wallet);
-            sage.save_config().map_err(sage_error)?;
+            sage.move_wallet(req.fingerprint, req.index)
+                .map_err(sage_error)?;
             encode(&())?
         }
         // Config readers. These are hand-written Tauri commands rather than
         // API endpoints, so they aren't part of the generated dispatch.
-        "network_config" => encode(&sage.config.network)?,
-        "default_wallet_config" => encode(&sage.wallet_config.defaults)?,
+        "network_config" => encode(&sage.network_config())?,
+        "default_wallet_config" => encode(&sage.wallet_defaults())?,
         "wallet_config" => {
             let req: WalletConfigRequest = decode(payload)?;
-            encode(
-                &sage
-                    .wallet_config
-                    .wallets
-                    .iter()
-                    .find(|wallet| wallet.fingerprint == req.fingerprint),
-            )?
+            encode(&sage.wallet_config_of(req.fingerprint))?
         }
-        // User themes are directories on disk, which the browser store has no
-        // equivalent for; the built-in themes come from the frontend.
-        "get_user_themes" => encode(&GetUserThemesResponse { themes: Vec::new() })?,
         // There are no peer connections in the HTTP model; every request goes
         // straight to the Coinset API.
         "get_peers" => encode(&GetPeersResponse { peers: Vec::new() })?,
@@ -260,6 +325,11 @@ struct AddressRequest {
 struct MoveKeyRequest {
     fingerprint: u32,
     index: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OfferCodeRequest {
+    code: String,
 }
 
 fn decode<T: DeserializeOwned>(payload: &str) -> Result<T, JsValue> {

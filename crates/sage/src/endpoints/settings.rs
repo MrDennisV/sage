@@ -4,16 +4,16 @@ use std::time::Duration;
 #[cfg(feature = "native")]
 use itertools::Itertools;
 use sage_api::{
-    GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse, NetworkKind, SetDeltaSync,
-    SetDeltaSyncOverride, SetDeltaSyncOverrideResponse, SetDeltaSyncResponse, SetNetworkApiUrl,
-    SetNetworkApiUrlResponse,
+    GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse, NetworkKind,
+    SetChangeAddress, SetDeltaSync, SetDeltaSyncOverride, SetDeltaSyncOverrideResponse,
+    SetDeltaSyncResponse, SetNetworkApiUrl, SetNetworkApiUrlResponse,
 };
 #[cfg(feature = "native")]
 use sage_api::{
     AddPeer, AddPeerResponse, GetPeers, GetPeersResponse, PeerRecord, RemovePeer,
-    RemovePeerResponse, SetChangeAddress, SetChangeAddressResponse, SetDiscoverPeers,
-    SetDiscoverPeersResponse, SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse,
-    SetNetworkResponse, SetTargetPeers, SetTargetPeersResponse,
+    RemovePeerResponse, SetChangeAddressResponse, SetDiscoverPeers, SetDiscoverPeersResponse,
+    SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse, SetNetworkResponse, SetTargetPeers,
+    SetTargetPeersResponse,
 };
 use sage_config::{MAINNET, TESTNET11};
 use sage_database::SqlExecutor;
@@ -78,6 +78,23 @@ impl<E: SqlExecutor> Sage<E> {
         wallet_config.delta_sync = req.delta_sync;
         self.save_config()?;
         Ok(SetDeltaSyncOverrideResponse {})
+    }
+
+    /// Records the change address for a wallet. The address is baked into the
+    /// wallet when it is built, so callers rebuild the wallet afterwards for
+    /// the new address to take effect.
+    pub fn set_change_address_config(&mut self, req: SetChangeAddress) -> Result<()> {
+        let Some(wallet_config) = self
+            .wallet_config
+            .wallets
+            .iter_mut()
+            .find(|w| w.fingerprint == req.fingerprint)
+        else {
+            return Err(Error::UnknownFingerprint);
+        };
+
+        wallet_config.change_address = req.change_address;
+        self.save_config()
     }
 }
 
@@ -160,8 +177,7 @@ impl Sage {
     }
 
     pub async fn set_network(&mut self, req: SetNetwork) -> Result<SetNetworkResponse> {
-        self.config.network.default_network.clone_from(&req.name);
-        self.save_config()?;
+        self.select_network(req.name)?;
         self.switch_wallet().await?;
         self.setup_peers().await?;
         Ok(SetNetworkResponse {})
@@ -171,16 +187,7 @@ impl Sage {
         &mut self,
         req: SetNetworkOverride,
     ) -> Result<SetNetworkOverrideResponse> {
-        let config = self
-            .wallet_config
-            .wallets
-            .iter_mut()
-            .find(|w| w.fingerprint == req.fingerprint)
-            .ok_or(Error::UnknownFingerprint)?;
-
-        config.network = req.name;
-
-        self.save_config()?;
+        self.override_wallet_network(req.fingerprint, req.name)?;
         self.switch_wallet().await?;
         self.setup_peers().await?;
 
@@ -191,16 +198,7 @@ impl Sage {
         &mut self,
         req: SetChangeAddress,
     ) -> Result<SetChangeAddressResponse> {
-        let Some(wallet_config) = self
-            .wallet_config
-            .wallets
-            .iter_mut()
-            .find(|w| w.fingerprint == req.fingerprint)
-        else {
-            return Err(Error::UnknownFingerprint);
-        };
-        wallet_config.change_address = req.change_address;
-        self.save_config()?;
+        self.set_change_address_config(req)?;
         self.switch_wallet().await?;
         Ok(SetChangeAddressResponse {})
     }
