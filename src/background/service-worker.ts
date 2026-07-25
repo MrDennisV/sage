@@ -10,8 +10,14 @@ import init, {
   sage_sync_once,
 } from '../extension/wasm/sage_wasm';
 
+import { broadcastEvent, installDappBridge } from './dapp-bridge';
 import { flushKv, initKvStore } from './kv-store';
-import { databaseKey, flushDb, initSqlEngine, selectDatabase } from './sql-store';
+import {
+  databaseKey,
+  flushDb,
+  initSqlEngine,
+  selectDatabase,
+} from './sql-store';
 
 const SYNC_ALARM = 'sage-sync';
 const SYNC_PERIOD_MINUTES = 0.5;
@@ -44,6 +50,17 @@ const SESSION_COMMANDS = new Set([
   'switch_wallet',
   'import_key',
 ]);
+
+// Session changes that connected websites have to hear about, because their
+// provider is holding an address or a chain id that just became wrong.
+const ACCOUNT_COMMANDS = new Set([
+  'switch_wallet',
+  'import_key',
+  'login',
+  'logout',
+]);
+
+const NETWORK_COMMANDS = new Set(['set_network', 'set_network_override']);
 
 function session(): Session {
   return JSON.parse(sage_session());
@@ -103,6 +120,25 @@ function exclusive<T>(work: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** Boots the wallet if needed and runs `work` with sole access to it. */
+function withWallet<T>(work: () => Promise<T>): Promise<T> {
+  return exclusive(async () => {
+    await boot();
+
+    return work();
+  });
+}
+
+/** Runs one Sage command. Only valid while holding the wallet. */
+async function dispatch(cmd: string, request: unknown): Promise<unknown> {
+  return JSON.parse(await sage_handle(cmd, JSON.stringify(request ?? {})));
+}
+
+async function flushAll(): Promise<void> {
+  await flushKv();
+  await flushDb();
+}
+
 async function syncOnce(): Promise<void> {
   const events = await exclusive(async () => {
     await boot();
@@ -116,9 +152,11 @@ async function syncOnce(): Promise<void> {
   });
 
   for (const event of events) {
-    chrome.runtime.sendMessage({ type: 'SYNC_EVENT', data: event }).catch(() => {
-      // No listeners while the popup is closed.
-    });
+    chrome.runtime
+      .sendMessage({ type: 'SYNC_EVENT', data: event })
+      .catch(() => {
+        // No listeners while the popup is closed.
+      });
   }
 }
 
@@ -137,24 +175,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   const { cmd, args } = message as { cmd: string; args?: { req?: unknown } };
 
-  exclusive(async () => {
-    await boot();
-
+  withWallet(async () => {
     // Tauri commands take the request wrapped in a `req` field; the wasm
     // dispatch takes the request struct itself.
     const request = args && 'req' in args ? args.req : args;
 
-    const response = JSON.parse(
-      await sage_handle(cmd, JSON.stringify(request ?? {})),
-    );
+    const response = await dispatch(cmd, request);
 
     if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
       await useSessionDatabase();
     }
 
     if (FLUSH_COMMANDS.has(cmd) || cmd === 'login') {
-      await flushKv();
-      await flushDb();
+      await flushAll();
     }
 
     return response;
@@ -163,6 +196,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
         syncOnce().catch((error) => console.error('sync failed', error));
       }
+
+      if (ACCOUNT_COMMANDS.has(cmd)) {
+        broadcastEvent('accountChanged').catch(() => {
+          // Websites that missed the event will read the new wallet anyway.
+        });
+      }
+
+      if (NETWORK_COMMANDS.has(cmd)) {
+        broadcastEvent('chainChanged').catch(() => {
+          // Websites that missed the event will read the new chain anyway.
+        });
+      }
+
       return response;
     })
     .then((data) => sendResponse({ data }))
@@ -173,4 +219,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
 
   return true;
+});
+
+installDappBridge({
+  withWallet,
+  dispatch,
+  isLoggedIn: () => session().fingerprint !== null,
+  refreshSession: useSessionDatabase,
+  flush: flushAll,
+  sync: () => syncOnce().catch((error) => console.error('sync failed', error)),
 });

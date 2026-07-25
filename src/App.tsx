@@ -13,6 +13,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { ThemeProvider, useTheme } from 'theme-o-rama';
 import { useLocalStorage } from 'usehooks-ts';
 import { BiometricProvider } from './contexts/BiometricContext';
+import { DappRequestProvider } from './contexts/DappRequestContext';
 import { ErrorProvider } from './contexts/ErrorContext';
 import {
   getBrowserLanguage,
@@ -194,6 +195,7 @@ function AppInner() {
             <WalletConnectProvider>
               <PriceProvider>
                 <RouterProvider router={router} />
+                {__IS_EXTENSION__ && <DappRequestProvider />}
               </PriceProvider>
             </WalletConnectProvider>
           </PeerProvider>

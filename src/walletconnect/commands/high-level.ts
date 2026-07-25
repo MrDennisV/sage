@@ -1,5 +1,4 @@
 import { commands } from '@/bindings';
-import { useWalletState } from '@/state';
 import { Params, Return } from '../commands';
 import { HandlerContext } from '../handler';
 
@@ -74,9 +73,11 @@ export async function handleSend(
 }
 
 export async function handleGetAddress(): Promise<Return<'chia_getAddress'>> {
-  return {
-    address: useWalletState.getState().sync.receive_address,
-  };
+  // Read the address from the wallet rather than the UI store, so this handler
+  // also works in the extension's service worker where there is no React state.
+  const data = await commands.getSyncStatus({});
+
+  return { address: data.receive_address };
 }
 
 export async function handleSignMessageByAddress(
