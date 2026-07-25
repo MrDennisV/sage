@@ -28,6 +28,25 @@ use sqlx::query;
 use crate::{Error, Result, Sage};
 
 impl<E: SqlExecutor> Sage<E> {
+    /// Forgets a key and its settings. The wallet's own data lives outside the
+    /// config, so callers remove that separately.
+    pub fn remove_key(&mut self, fingerprint: u32) -> Result<()> {
+        self.keychain.remove(fingerprint);
+
+        self.wallet_config
+            .wallets
+            .retain(|wallet| wallet.fingerprint != fingerprint);
+
+        if self.config.global.fingerprint == Some(fingerprint) {
+            self.config.global.fingerprint = None;
+        }
+
+        self.save_keychain()?;
+        self.save_config()?;
+
+        Ok(())
+    }
+
     pub fn generate_mnemonic(&self, req: GenerateMnemonic) -> Result<GenerateMnemonicResponse> {
         let mut rng = ChaCha20Rng::from_entropy();
         let mnemonic = if req.use_24_words {
@@ -391,18 +410,7 @@ impl Sage {
     }
 
     pub fn delete_key(&mut self, req: DeleteKey) -> Result<DeleteKeyResponse> {
-        self.keychain.remove(req.fingerprint);
-
-        self.wallet_config
-            .wallets
-            .retain(|wallet| wallet.fingerprint != req.fingerprint);
-
-        if self.config.global.fingerprint == Some(req.fingerprint) {
-            self.config.global.fingerprint = None;
-        }
-
-        self.save_keychain()?;
-        self.save_config()?;
+        self.remove_key(req.fingerprint)?;
 
         let path = self.path.join("wallets").join(req.fingerprint.to_string());
         if path.try_exists()? {

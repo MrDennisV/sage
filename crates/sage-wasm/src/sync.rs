@@ -86,9 +86,9 @@ const BATCH_SIZE: usize = 50;
 const CONCURRENT_REQUESTS: usize = 6;
 
 /// How long one pass may spend identifying coins. The pass runs while holding
-/// the wallet, so it has to hand control back for the interface to stay
-/// responsive; the next pass picks up where this one stopped.
-const PUZZLE_SYNC_BUDGET_MS: f64 = 5_000.0;
+/// the wallet, so a request arriving mid-pass waits at most this long; the
+/// next pass picks up where this one stopped.
+const PUZZLE_SYNC_BUDGET_MS: f64 = 1_500.0;
 
 /// Identifies unsynced coins, mirroring the native `PuzzleQueue`. Coins that
 /// fail to fetch are skipped, and the time budget keeps a large wallet (or

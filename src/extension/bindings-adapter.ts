@@ -255,8 +255,21 @@ export type {
   WalletDefaults,
 } from '../bindings';
 
-// Helper: send command to service worker via chrome.runtime
+import { commandDispatcher } from './command-dispatcher';
+
+// Helper: send command to service worker via chrome.runtime, or run it in
+// process when we already are the service worker.
 async function invoke<T>(cmd: string, args?: Record<string, any>): Promise<T> {
+  const dispatch = commandDispatcher();
+
+  if (dispatch) {
+    // Tauri commands take the request wrapped in a `req` field; the wasm
+    // dispatch takes the request struct itself.
+    const request = args && 'req' in args ? args.req : args;
+
+    return dispatch(cmd, request) as Promise<T>;
+  }
+
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
       { type: 'COMMAND', cmd, args },
@@ -266,7 +279,18 @@ async function invoke<T>(cmd: string, args?: Record<string, any>): Promise<T> {
           return;
         }
         if (response && response.error) {
-          reject(response.error);
+          // Errors cross as strings; wallet errors carry their kind as JSON so
+          // the interface can tell them apart, matching what Tauri throws.
+          try {
+            const parsed = JSON.parse(response.error);
+            reject(
+              parsed && typeof parsed === 'object' && 'kind' in parsed
+                ? parsed
+                : { kind: 'internal', reason: response.error },
+            );
+          } catch {
+            reject({ kind: 'internal', reason: response.error });
+          }
           return;
         }
         resolve(response?.data);

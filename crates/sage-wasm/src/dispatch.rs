@@ -3,7 +3,8 @@ use std::cell::Cell;
 use chia_sdk_utils::Address;
 use sage::Sage;
 use sage_api::{
-    GetPeersResponse, GetUserThemesResponse, ImportKey, ImportKeyResponse, Login, LoginResponse,
+    DeleteKey, DeleteKeyResponse, GetPeersResponse, GetUserThemesResponse, ImportKey,
+    ImportKeyResponse, Login, LoginResponse,
     Logout, LogoutResponse, SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse,
     SetNetworkResponse,
 };
@@ -14,7 +15,7 @@ use wasm_bindgen::prelude::*;
 use crate::{
     BrowserExecutor,
     bootstrap::{already_busy, not_initialized, sage_cell},
-    js_error,
+    js_error, sage_error,
 };
 
 thread_local! {
@@ -56,6 +57,10 @@ async fn handle(
         return Ok(response);
     }
 
+    if let Some(response) = wallet_connect_command(sage, command, payload).await? {
+        return Ok(response);
+    }
+
     impl_endpoints_portable! {
         (
             generate_mnemonic, rename_key, set_wallet_emoji, get_key, get_secret_key, get_keys,
@@ -78,12 +83,52 @@ async fn handle(
         Ok(match command {
             (repeat endpoint_string => {
                 let req: sage_api::Endpoint = decode(payload)?;
-                let res = sage.endpoint(req) maybe_await .map_err(js_error)?;
+                let res = sage.endpoint(req) maybe_await .map_err(sage_error)?;
                 encode(&res)?
             })
             _ => return Err(JsValue::from_str(&format!("unsupported command: {command}"))),
         })
     }
+}
+
+/// The endpoints dApps reach through `window.chia`. They are not part of the
+/// generated endpoint set, so they are dispatched by hand. Sending a bundle
+/// straight to the network is missing on purpose: it broadcasts through the
+/// peer pool, which the browser build does not have.
+async fn wallet_connect_command(
+    sage: &Sage<BrowserExecutor>,
+    command: &str,
+    payload: &str,
+) -> Result<Option<String>, JsValue> {
+    let response = match command {
+        "filter_unlocked_coins" => encode(
+            &sage
+                .filter_unlocked_coins(decode(payload)?)
+                .await
+                .map_err(sage_error)?,
+        )?,
+        "get_asset_coins" => encode(
+            &sage
+                .get_asset_coins(decode(payload)?)
+                .await
+                .map_err(sage_error)?,
+        )?,
+        "sign_message_with_public_key" => encode(
+            &sage
+                .sign_message_with_public_key(decode(payload)?)
+                .await
+                .map_err(sage_error)?,
+        )?,
+        "sign_message_by_address" => encode(
+            &sage
+                .sign_message_by_address(decode(payload)?)
+                .await
+                .map_err(sage_error)?,
+        )?,
+        _ => return Ok(None),
+    };
+
+    Ok(Some(response))
 }
 
 /// Commands that change which wallet or network is active. They only touch the
@@ -98,13 +143,13 @@ fn session_command(
         "login" => {
             let req: Login = decode(payload)?;
             sage.config.global.fingerprint = Some(req.fingerprint);
-            sage.save_config().map_err(js_error)?;
+            sage.save_config().map_err(sage_error)?;
             encode(&LoginResponse {})?
         }
         "logout" => {
             let _req: Logout = decode(payload)?;
             sage.config.global.fingerprint = None;
-            sage.save_config().map_err(js_error)?;
+            sage.save_config().map_err(sage_error)?;
             sage.wallet = None;
             encode(&LogoutResponse {})?
         }
@@ -112,13 +157,25 @@ fn session_command(
             let req: ImportKey = decode(payload)?;
             // Addresses aren't derived here because the wallet's database
             // isn't selected yet; the first sync fills them in.
-            let (fingerprint, _master_sk, _master_pk) = sage.add_key(&req).map_err(js_error)?;
+            let (fingerprint, _master_sk, _master_pk) = sage.add_key(&req).map_err(sage_error)?;
             encode(&ImportKeyResponse { fingerprint })?
+        }
+        "delete_key" => {
+            let req: DeleteKey = decode(payload)?;
+
+            // The wallet's databases are removed by the caller, so drop the
+            // handle to them here.
+            if sage.config.global.fingerprint == Some(req.fingerprint) {
+                sage.wallet = None;
+            }
+
+            sage.remove_key(req.fingerprint).map_err(sage_error)?;
+            encode(&DeleteKeyResponse {})?
         }
         "set_network" => {
             let req: SetNetwork = decode(payload)?;
             sage.config.network.default_network.clone_from(&req.name);
-            sage.save_config().map_err(js_error)?;
+            sage.save_config().map_err(sage_error)?;
             encode(&SetNetworkResponse {})?
         }
         "set_network_override" => {
@@ -129,10 +186,10 @@ fn session_command(
                 .wallets
                 .iter_mut()
                 .find(|wallet| wallet.fingerprint == req.fingerprint)
-                .ok_or_else(|| js_error(sage::Error::UnknownFingerprint))?;
+                .ok_or_else(|| sage_error(sage::Error::UnknownFingerprint))?;
 
             wallet.network = req.name;
-            sage.save_config().map_err(js_error)?;
+            sage.save_config().map_err(sage_error)?;
             encode(&SetNetworkOverrideResponse {})?
         }
         // The wallet is rebuilt by the service worker's `sage_login` call, so
@@ -153,11 +210,11 @@ fn session_command(
                 .wallets
                 .iter()
                 .position(|wallet| wallet.fingerprint == req.fingerprint)
-                .ok_or_else(|| js_error(sage::Error::UnknownFingerprint))?;
+                .ok_or_else(|| sage_error(sage::Error::UnknownFingerprint))?;
 
             let wallet = sage.wallet_config.wallets.remove(index);
             sage.wallet_config.wallets.insert(req.index as usize, wallet);
-            sage.save_config().map_err(js_error)?;
+            sage.save_config().map_err(sage_error)?;
             encode(&())?
         }
         // Config readers. These are hand-written Tauri commands rather than

@@ -28,3 +28,21 @@ pub fn version() -> String {
 pub(crate) fn js_error(error: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&error.to_string())
 }
+
+/// Reports a wallet error the same way the desktop commands do, so the
+/// interface can tell an unauthorized request from a missing record instead of
+/// only seeing a message.
+pub(crate) fn sage_error(error: sage::Error) -> JsValue {
+    #[derive(serde::Serialize)]
+    struct ApiError {
+        kind: sage_api::ErrorKind,
+        reason: String,
+    }
+
+    let payload = ApiError {
+        kind: error.kind(),
+        reason: error.to_string(),
+    };
+
+    serde_json::to_string(&payload).map_or_else(|_| js_error(error), |json| JsValue::from_str(&json))
+}

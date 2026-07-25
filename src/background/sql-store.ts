@@ -209,6 +209,45 @@ export async function initSqlEngine(): Promise<void> {
 }
 
 /**
+ * Removes every database belonging to a wallet, which is what deleting a key
+ * does on desktop by removing the wallet's directory.
+ */
+export async function deleteDatabases(fingerprint: number): Promise<void> {
+  const prefix = `${fingerprint}_`;
+
+  if (dbKey?.startsWith(prefix)) {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+
+    await persisting;
+    db?.close();
+    db = null;
+    dbKey = null;
+  }
+
+  const idb = await openIdb();
+
+  await new Promise<void>((resolve, reject) => {
+    const store = idb.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE);
+    const request = store.getAllKeys();
+
+    request.onsuccess = () => {
+      for (const key of request.result) {
+        if (typeof key === 'string' && key.startsWith(prefix)) {
+          store.delete(key);
+        }
+      }
+    };
+    request.onerror = () => reject(request.error);
+
+    store.transaction.oncomplete = () => resolve();
+    store.transaction.onerror = () => reject(store.transaction.error);
+  });
+}
+
+/**
  * Makes the database for a wallet and network pair the active one, persisting
  * and closing the previous database first. Returns true when the database was
  * created empty, meaning migrations still have to run against it.
