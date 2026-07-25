@@ -59,6 +59,9 @@ interface CommandDialogProps<T extends WalletConnectCommand> {
  * the dialog is centered and size-capped by its own utilities, which would
  * otherwise have to be unpicked one by one.
  */
+// The request fills the whole popup, so the window opening is the dialog
+// appearing. Sliding it in again afterwards reads as a second, late arrival,
+// which is why the animation is off here and nowhere else.
 const fullPopup: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
@@ -69,6 +72,7 @@ const fullPopup: React.CSSProperties = {
   transform: 'none',
   borderRadius: 0,
   overflow: 'hidden',
+  animation: 'none',
 };
 
 function SignCoinSpendsDialog({

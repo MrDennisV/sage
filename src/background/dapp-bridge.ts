@@ -144,6 +144,12 @@ function describePending(request: PendingRequest) {
 
 function broadcastPending() {
   const [request] = pending.values();
+
+  // Nothing left, and the popup is about to close. Clearing the dialog now
+  // would show the wallet behind it for as long as the close takes, so the
+  // answered request stays on screen until the window itself goes.
+  if (!request && dismissTimer !== null) return;
+
   const message = {
     type: 'DAPP_PENDING',
     request: request ? describePending(request) : null,
@@ -291,9 +297,11 @@ function settle(request: PendingRequest, error?: Error, result?: unknown) {
     request.resolve(result);
   }
 
-  broadcastPending();
+  // Decide the popup's fate before telling it what is pending, so a dialog
+  // about to be closed with the window is not cleared on its own first.
   closeApprovalWindow();
   dismissOpenedUi();
+  broadcastPending();
 }
 
 function rejectAllPending(reason: string) {

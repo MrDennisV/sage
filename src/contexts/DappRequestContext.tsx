@@ -11,6 +11,9 @@ import { ReactNode, useCallback, useEffect, useState } from 'react';
 
 const UI_PORT = 'sage-dapp-ui';
 
+/** How long an answered request waits to be told what happens to it. */
+const ANSWER_TIMEOUT_MS = 5000;
+
 interface DappRequest {
   id: string;
   method: WalletConnectCommand;
@@ -52,6 +55,14 @@ export function DappRequestProvider({ children }: { children?: ReactNode }) {
         .catch(() => {
           // The service worker restarted; the request is already rejected.
         });
+
+      // The worker says what to show next, or closes the window. If it died
+      // answering, nothing would ever say so, and an answered request would sit
+      // on screen for good.
+      setTimeout(
+        () => setRequest((current) => (current?.id === id ? null : current)),
+        ANSWER_TIMEOUT_MS,
+      );
     },
     [],
   );
@@ -75,16 +86,16 @@ export function DappRequestProvider({ children }: { children?: ReactNode }) {
 
       addError({ kind: 'walletconnect', reason });
       respond(request.id, { error: reason });
-    } finally {
-      setRequest(null);
     }
+    // The dialog is left up on purpose. Only the service worker knows whether
+    // another request is waiting behind this one or the window is about to
+    // close, and it says so; clearing it here would show the wallet in between.
   }, [request, promptIfEnabled, respond, addError]);
 
   const reject = useCallback(() => {
     if (!request) return;
 
     respond(request.id, { error: 'The user rejected the request' });
-    setRequest(null);
   }, [request, respond]);
 
   return (
