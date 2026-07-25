@@ -1,13 +1,12 @@
 use std::{num::TryFromIntError, time::SystemTimeError};
 
 use crate::prelude::*;
-use clvm_traits::{FromClvmError, ToClvmError};
-use clvmr::error::EvalErr;
 use chia_sdk_signer::SignerError;
 use chia_sdk_utils::CoinSelectionError;
 #[cfg(feature = "native")]
 use chia_wallet_sdk::client::ClientError;
-#[cfg(feature = "native")]
+use clvm_traits::{FromClvmError, ToClvmError};
+use clvmr::error::EvalErr;
 use sage_assets::UriError;
 use sage_database::{CoinKind, DatabaseError};
 use thiserror::Error;
@@ -36,7 +35,6 @@ pub enum WalletError {
     #[error("Request error: {0}")]
     Request(#[from] reqwest::Error),
 
-    #[cfg(feature = "native")]
     #[error("URI error: {0}")]
     Uri(#[from] UriError),
 

@@ -1,14 +1,12 @@
 use std::time::Duration;
 
-use sage_assets::DexieCat;
-use sage_database::{Asset, AssetKind, Database};
-//use serde::Deserialize;
+use sage_database::Database;
 use tokio::{
     sync::mpsc,
     time::{sleep, timeout},
 };
 
-use crate::{SyncEvent, WalletError};
+use crate::{SyncEvent, WalletError, refresh_cat_catalog};
 
 #[derive(Debug)]
 pub struct CatQueue {
@@ -34,33 +32,15 @@ impl CatQueue {
     }
 
     async fn process_batch(&self) -> Result<(), WalletError> {
-        let cats = timeout(Duration::from_secs(120), DexieCat::fetch_all(self.testnet)).await??;
+        let refreshed = timeout(
+            Duration::from_secs(120),
+            refresh_cat_catalog(&self.db, self.testnet),
+        )
+        .await??;
 
-        if cats.is_empty() {
-            return Ok(());
+        if refreshed {
+            self.sync_sender.send(SyncEvent::CatInfo).await.ok();
         }
-
-        let mut tx = self.db.tx().await?;
-
-        for cat in cats {
-            tx.insert_asset(Asset {
-                hash: cat.hash,
-                name: cat.name,
-                ticker: cat.ticker,
-                precision: 3,
-                icon_url: cat.icon_url,
-                description: cat.description,
-                is_sensitive_content: false,
-                is_visible: true,
-                hidden_puzzle_hash: cat.hidden_puzzle_hash,
-                kind: AssetKind::Token,
-            })
-            .await?;
-        }
-
-        tx.commit().await?;
-
-        self.sync_sender.send(SyncEvent::CatInfo).await.ok();
 
         Ok(())
     }

@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::prelude::*;
 use chia_puzzle_types::{LineageProof, nft::NftMetadata};
 
+use sage_assets::DexieCat;
 use sage_database::{
     Asset, AssetKind, Database, DatabaseTx, DidCoinInfo, NftCoinInfo, OptionCoinInfo,
     SerializedNftInfo, SqlExecutor,
@@ -39,6 +40,62 @@ pub async fn validate_wallet_coin<E: SqlExecutor>(
         tx.delete_coin(coin_id).await?;
         return Ok(false);
     }
+
+    Ok(true)
+}
+
+/// Records every token Dexie knows about, which is what the interface offers to
+/// pick from when issuing an offer or taking a swap. Returns whether anything
+/// was recorded, since an empty catalog means the listing gave nothing back and
+/// there is nothing for the caller to announce.
+pub async fn refresh_cat_catalog<E: SqlExecutor>(
+    db: &Database<E>,
+    testnet: bool,
+) -> Result<bool, WalletError> {
+    let mut page = 1;
+    let mut recorded = false;
+
+    while refresh_cat_catalog_page(db, testnet, page).await? {
+        recorded = true;
+        page += 1;
+    }
+
+    Ok(recorded)
+}
+
+/// Records one page of the token catalog, returning whether the page held
+/// anything. Callers that cannot spend an unbounded amount of time in one go
+/// walk the pages themselves and stop wherever they need to.
+pub async fn refresh_cat_catalog_page<E: SqlExecutor>(
+    db: &Database<E>,
+    testnet: bool,
+    page: u32,
+) -> Result<bool, WalletError> {
+    let cats = DexieCat::fetch_page(page, testnet).await?;
+
+    if cats.is_empty() {
+        return Ok(false);
+    }
+
+    let mut tx = db.tx().await?;
+
+    for cat in cats {
+        tx.insert_asset(Asset {
+            hash: cat.hash,
+            name: cat.name,
+            ticker: cat.ticker,
+            precision: 3,
+            icon_url: cat.icon_url,
+            description: cat.description,
+            is_sensitive_content: false,
+            is_visible: true,
+            hidden_puzzle_hash: cat.hidden_puzzle_hash,
+            kind: AssetKind::Token,
+        })
+        .await?;
+    }
+
+    tx.commit().await?;
 
     Ok(true)
 }

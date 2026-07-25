@@ -3,11 +3,6 @@ use std::time::Duration;
 
 #[cfg(feature = "native")]
 use itertools::Itertools;
-use sage_api::{
-    GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse, NetworkKind,
-    SetChangeAddress, SetDeltaSync, SetDeltaSyncOverride, SetDeltaSyncOverrideResponse,
-    SetDeltaSyncResponse, SetNetworkApiUrl, SetNetworkApiUrlResponse,
-};
 #[cfg(feature = "native")]
 use sage_api::{
     AddPeer, AddPeerResponse, GetPeers, GetPeersResponse, PeerRecord, RemovePeer,
@@ -15,7 +10,11 @@ use sage_api::{
     SetNetwork, SetNetworkOverride, SetNetworkOverrideResponse, SetNetworkResponse, SetTargetPeers,
     SetTargetPeersResponse,
 };
-use sage_config::{MAINNET, TESTNET11};
+use sage_api::{
+    GetNetwork, GetNetworkResponse, GetNetworks, GetNetworksResponse, SetChangeAddress,
+    SetDeltaSync, SetDeltaSyncOverride, SetDeltaSyncOverrideResponse, SetDeltaSyncResponse,
+    SetNetworkApiUrl, SetNetworkApiUrlResponse,
+};
 use sage_database::SqlExecutor;
 #[cfg(feature = "native")]
 use sage_wallet::SyncCommand;
@@ -27,7 +26,10 @@ impl<E: SqlExecutor> Sage<E> {
         Ok(self.network_list.clone())
     }
 
-    pub fn set_network_api_url(&mut self, req: SetNetworkApiUrl) -> Result<SetNetworkApiUrlResponse> {
+    pub fn set_network_api_url(
+        &mut self,
+        req: SetNetworkApiUrl,
+    ) -> Result<SetNetworkApiUrlResponse> {
         let network = self
             .network_list
             .networks
@@ -47,13 +49,7 @@ impl<E: SqlExecutor> Sage<E> {
 
         Ok(GetNetworkResponse {
             network: network.clone(),
-            kind: if network.genesis_challenge == MAINNET.genesis_challenge {
-                NetworkKind::Mainnet
-            } else if network.genesis_challenge == TESTNET11.genesis_challenge {
-                NetworkKind::Testnet
-            } else {
-                NetworkKind::Unknown
-            },
+            kind: self.network_kind(),
         })
     }
 

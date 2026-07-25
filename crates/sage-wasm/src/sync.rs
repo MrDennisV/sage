@@ -1,12 +1,16 @@
-use std::{cell::RefCell, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    sync::Arc,
+};
 
 use chia_protocol::Bytes32;
 use futures_util::future::join_all;
+use sage_api::NetworkKind;
 use sage_wallet::{
     CoinsetPeer, EventSink, SyncEvent, Wallet, add_new_subscriptions, apply_synced_coins,
-    fetch_puzzles, sync_wallet,
+    fetch_puzzles, refresh_cat_catalog_page, sync_wallet,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -44,12 +48,21 @@ impl EventSink for CollectorSink {
 pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
     // Clone the wallet handle and peer out of the RefCell before any await, so
     // commands arriving during the sync aren't rejected as busy.
-    let (wallet, peer) = {
+    let (wallet, peer, catalog_network) = {
         let cell = sage_cell();
         let guard = cell.borrow();
         let sage = guard.as_ref().ok_or_else(not_initialized)?;
         let wallet = sage.wallet().map_err(js_error)?;
-        (wallet, sage.peer())
+
+        // Dexie only lists tokens for the two well known chains, which is also
+        // where the native queue restricts itself to.
+        let catalog_network = match sage.network_kind() {
+            NetworkKind::Mainnet => Some(false),
+            NetworkKind::Testnet => Some(true),
+            NetworkKind::Unknown => None,
+        };
+
+        (wallet, sage.peer(), catalog_network)
     };
 
     let sink = CollectorSink::default();
@@ -71,6 +84,10 @@ pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
     }
 
     identify_puzzles(&wallet, &peer, &sink).await?;
+
+    if let Some(testnet) = catalog_network {
+        refresh_cat_catalog(&wallet, testnet, &sink).await;
+    }
 
     let events: Vec<sage_api::SyncEvent> =
         sink.into_events().into_iter().map(to_api_event).collect();
@@ -102,7 +119,11 @@ async fn identify_puzzles(
     let deadline = js_sys::Date::now() + PUZZLE_SYNC_BUDGET_MS;
 
     while js_sys::Date::now() < deadline {
-        let rows = wallet.db.unsynced_coins(BATCH_SIZE).await.map_err(js_error)?;
+        let rows = wallet
+            .db
+            .unsynced_coins(BATCH_SIZE)
+            .await
+            .map_err(js_error)?;
 
         if rows.is_empty() {
             break;
@@ -165,6 +186,66 @@ async fn identify_puzzles(
     }
 
     Ok(())
+}
+
+thread_local! {
+    /// The page of the token catalog to ask for next, and when the listing was
+    /// last walked all the way through. Both start over when the worker
+    /// restarts, which costs nothing but the requests: recording a token that
+    /// is already there leaves it as it was.
+    static CATALOG_PAGE: Cell<u32> = const { Cell::new(1) };
+    static CATALOG_WALKED_AT: Cell<f64> = const { Cell::new(0.0) };
+}
+
+/// How long one pass may spend on the token catalog.
+const CATALOG_BUDGET_MS: f64 = 1_000.0;
+
+/// How long a finished walk stands before the listing is walked again.
+const CATALOG_INTERVAL_MS: f64 = 6.0 * 60.0 * 60.0 * 1_000.0;
+
+/// Records the tokens Dexie lists, which is where the interface gets the
+/// assets it offers to pick from. The listing runs to thousands of tokens, so
+/// each pass walks as many pages as its budget allows and the next one carries
+/// on from there. Natively this is a queue of its own, and a failure there
+/// doesn't stop coins from syncing either, so a failed page is logged and
+/// retried on the next pass rather than failing the sync.
+async fn refresh_cat_catalog(
+    wallet: &Arc<Wallet<BrowserExecutor>>,
+    testnet: bool,
+    sink: &CollectorSink,
+) {
+    if CATALOG_PAGE.get() == 1
+        && js_sys::Date::now() - CATALOG_WALKED_AT.get() < CATALOG_INTERVAL_MS
+    {
+        return;
+    }
+
+    let deadline = js_sys::Date::now() + CATALOG_BUDGET_MS;
+    let mut recorded = false;
+
+    while js_sys::Date::now() < deadline {
+        let page = CATALOG_PAGE.get();
+
+        match refresh_cat_catalog_page(&wallet.db, testnet, page).await {
+            Ok(true) => {
+                CATALOG_PAGE.set(page + 1);
+                recorded = true;
+            }
+            Ok(false) => {
+                CATALOG_PAGE.set(1);
+                CATALOG_WALKED_AT.set(js_sys::Date::now());
+                break;
+            }
+            Err(error) => {
+                warn!("Failed to record token catalog page {page}: {error}");
+                break;
+            }
+        }
+    }
+
+    if recorded {
+        sink.send_event(SyncEvent::CatInfo).await;
+    }
 }
 
 /// Mirrors the native mapping in `src-tauri/src/app_state.rs` so the frontend

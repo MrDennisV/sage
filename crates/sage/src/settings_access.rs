@@ -3,7 +3,8 @@
 //! dispatch call the same code instead of each carrying a copy.
 
 use chia_sdk_utils::Address;
-use sage_config::{NetworkConfig, Wallet, WalletDefaults};
+use sage_api::NetworkKind;
+use sage_config::{MAINNET, NetworkConfig, TESTNET11, Wallet, WalletDefaults};
 use sage_database::SqlExecutor;
 
 use crate::{Error, Result, Sage};
@@ -16,6 +17,20 @@ impl<E: SqlExecutor> Sage<E> {
 
     pub fn network_config(&self) -> NetworkConfig {
         self.config.network.clone()
+    }
+
+    /// Which of the well known chains the active network is, which decides
+    /// whether services like the token listing have anything to say about it.
+    pub fn network_kind(&self) -> NetworkKind {
+        let genesis_challenge = self.network().genesis_challenge;
+
+        if genesis_challenge == MAINNET.genesis_challenge {
+            NetworkKind::Mainnet
+        } else if genesis_challenge == TESTNET11.genesis_challenge {
+            NetworkKind::Testnet
+        } else {
+            NetworkKind::Unknown
+        }
     }
 
     pub fn wallet_defaults(&self) -> WalletDefaults {

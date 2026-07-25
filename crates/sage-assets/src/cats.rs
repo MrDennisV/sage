@@ -19,37 +19,46 @@ impl DexieCat {
         let mut assets = Vec::new();
 
         loop {
-            let response = reqwest::get(format!(
-                "{}/assets?page_size=100&page={page}&type=cat",
-                dexie_base_url(testnet)
-            ))
-            .await?
-            .json::<AssetResponse>()
-            .await?;
+            let batch = Self::fetch_page(page, testnet).await?;
 
-            if response.assets.is_empty() {
+            if batch.is_empty() {
                 break;
             }
 
-            for asset in response.assets {
-                assets.push(Self {
-                    hash: asset.id,
-                    name: asset.name,
-                    icon_url: Some(format!(
-                        "{}/{}.webp",
-                        dexie_image_base_url(testnet),
-                        asset.id
-                    )),
-                    description: asset.description,
-                    ticker: asset.code,
-                    hidden_puzzle_hash: asset.hidden_puzzle_hash,
-                });
-            }
-
+            assets.extend(batch);
             page += 1;
         }
 
         Ok(assets)
+    }
+
+    /// One page of the token listing. Pages are numbered from one, and an empty
+    /// page means the end of the listing has been reached.
+    pub async fn fetch_page(page: u32, testnet: bool) -> Result<Vec<Self>, UriError> {
+        let response = reqwest::get(format!(
+            "{}/assets?page_size=100&page={page}&type=cat",
+            dexie_base_url(testnet)
+        ))
+        .await?
+        .json::<AssetResponse>()
+        .await?;
+
+        Ok(response
+            .assets
+            .into_iter()
+            .map(|asset| Self {
+                hash: asset.id,
+                name: asset.name,
+                icon_url: Some(format!(
+                    "{}/{}.webp",
+                    dexie_image_base_url(testnet),
+                    asset.id
+                )),
+                description: asset.description,
+                ticker: asset.code,
+                hidden_puzzle_hash: asset.hidden_puzzle_hash,
+            })
+            .collect())
     }
 
     pub async fn fetch(asset_id: Bytes32, testnet: bool) -> Result<Self, UriError> {
