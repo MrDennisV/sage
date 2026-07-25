@@ -109,10 +109,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
     await boot();
 
-    const { cmd, args } = message as { cmd: string; args: unknown };
+    const { cmd, args } = message as { cmd: string; args?: { req?: unknown } };
+
+    // Tauri commands take the request wrapped in a `req` field; the wasm
+    // dispatch takes the request struct itself.
+    const request = args && 'req' in args ? args.req : args;
 
     const response = JSON.parse(
-      await sage_handle(cmd, JSON.stringify(args ?? {})),
+      await sage_handle(cmd, JSON.stringify(request ?? {})),
     );
 
     if (SESSION_COMMANDS.has(cmd) || cmd === 'login') {
