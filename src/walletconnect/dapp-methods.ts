@@ -1,13 +1,16 @@
-// Goby (docs.goby.app) is the API real Chia dApps target, so `window.chia`
-// speaks it. Its method names are bare where Sage's WalletConnect commands are
-// namespaced, and a couple of its methods shape their params differently. This
-// module is the single place that translates between the two vocabularies; the
-// injected provider and the service worker both run requests through it so the
-// mapping can never drift between them.
+// The names a dApp calls, and what each one means to the wallet.
+//
+// Chia dApps are written against bare method names — `connect`, `getPublicKeys`
+// — where Sage's WalletConnect commands are namespaced, and a couple of them
+// shape their params differently. Goby (docs.goby.app) is where that vocabulary
+// comes from, and matching it is what lets a site written for Goby work here
+// unchanged. This module is the single place the two are reconciled; the
+// injected provider and the service worker both run requests through it, so the
+// mapping cannot drift between them.
 import type { WalletConnectCommand } from './commands';
 
-/** Goby method names that have a Sage WalletConnect command behind them. */
-const GOBY_COMMANDS: Record<string, WalletConnectCommand> = {
+/** Bare method names that have a Sage WalletConnect command behind them. */
+const DAPP_COMMANDS: Record<string, WalletConnectCommand> = {
   connect: 'chip0002_connect',
   chainId: 'chip0002_chainId',
   getPublicKeys: 'chip0002_getPublicKeys',
@@ -75,7 +78,7 @@ export function toDappRequest(method: string, params?: unknown): DappRequest {
     return { method, params };
   }
 
-  const command = GOBY_COMMANDS[method];
+  const command = DAPP_COMMANDS[method];
 
   if (command) {
     return {

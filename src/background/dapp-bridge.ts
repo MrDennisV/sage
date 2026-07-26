@@ -1,5 +1,5 @@
 // Serves `window.chia` for web pages. Requests arrive from the content bridge,
-// are translated out of Goby's vocabulary, and then take one of two paths:
+// are translated into the wallet's vocabulary, and then take one of two paths:
 // read-only commands run here against the wasm wallet, while anything that
 // spends, signs or grants access is parked until the user answers Sage's own
 // confirmation dialog in the popup.
@@ -8,7 +8,7 @@ import {
   walletConnectCommands,
   type WalletConnectCommand,
 } from '@/walletconnect/commands';
-import { toDappRequest, type NativeMethod } from '@/walletconnect/goby';
+import { toDappRequest, type NativeMethod } from '@/walletconnect/dapp-methods';
 import { handleCommand } from '@/walletconnect/handler';
 import {
   setCommandDispatcher,
@@ -531,7 +531,7 @@ async function handleDappRequest(
 
   const request = toDappRequest(message.method ?? '', message.params);
 
-  // Goby's methods are called with no arguments where Sage's schemas expect an
+  // A dApp calls these with no arguments where Sage's schemas expect an
   // empty request object.
   return route(request.method, request.params ?? {}, origin);
 }

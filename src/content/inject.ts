@@ -1,10 +1,10 @@
 // Runs in the page's MAIN world and installs `window.chia`, the provider Chia
-// dApps talk to. The API surface is Goby's (docs.goby.app) because that is what
-// dApps are written against: `request({ method, params })` is the entry point,
-// method names are bare, and `accountChanged`/`chainChanged` tell a dApp to
-// reload. Every call is relayed to the content bridge, which forwards it to the
-// service worker, where `walletconnect/goby.ts` translates the Goby vocabulary
-// into Sage's commands. This file deliberately has no imports: it is injected
+// dApps talk to. The shape is the one dApps are written against, which Goby
+// (docs.goby.app) established: `request({ method, params })` is the entry
+// point, method names are bare, and `accountChanged`/`chainChanged` tell a dApp
+// to reload. Every call is relayed to the content bridge, which forwards it to
+// the service worker, where `walletconnect/dapp-methods.ts` says what each name
+// means to the wallet. This file deliberately has no imports: it is injected
 // into every page and a shared chunk would not be loadable from there.
 
 interface RequestArguments {
@@ -27,7 +27,7 @@ interface ChiaProvider {
   signCoinSpends: (params: unknown) => Promise<unknown>;
   signMessage: (params: unknown) => Promise<unknown>;
   sendTransaction: (params: unknown) => Promise<unknown>;
-  // Goby wallet methods
+  // Wallet methods outside CHIP-0002
   transfer: (params: unknown) => Promise<unknown>;
   walletWatchAsset: (params: unknown) => Promise<boolean>;
   walletSwitchChain: (params: unknown) => Promise<null>;
@@ -107,7 +107,7 @@ function createProvider(): ChiaProvider {
       return request({ method: 'sendTransaction', params });
     },
 
-    // Goby wallet methods
+    // Wallet methods outside CHIP-0002
     async transfer(params: unknown) {
       return request({ method: 'transfer', params });
     },
