@@ -3,27 +3,29 @@ use std::slice;
 use chia_bls::{master_to_wallet_hardened, master_to_wallet_unhardened, sign};
 use chia_puzzle_types::{DeriveSynthetic, Proof};
 use chia_sdk_driver::P2DelegatedConditionsLayer;
-use sage_api::wallet_connect::{
-    self, AssetCoinType, FilterUnlockedCoins, FilterUnlockedCoinsResponse, GetAssetCoins,
-    GetAssetCoinsResponse, LineageProof, SignMessageByAddress, SignMessageByAddressResponse,
-    SignMessageWithPublicKey, SignMessageWithPublicKeyResponse, SpendableCoin,
+use sage_api::{
+    Amount,
+    wallet_connect::{
+        self, AssetCoinType, FilterUnlockedCoins, FilterUnlockedCoinsResponse, GetAssetCoins,
+        GetAssetCoinsResponse, LineageProof, SendTransactionImmediately,
+        SendTransactionImmediatelyResponse, SignMessageByAddress, SignMessageByAddressResponse,
+        SignMessageWithPublicKey, SignMessageWithPublicKeyResponse, SpendableCoin,
+    },
 };
-use sage_api::wallet_connect::{SendTransactionImmediately, SendTransactionImmediatelyResponse};
 use sage_database::{
     AssetFilter, CoinFilterMode, CoinSortMode, DeserializePrimitive, P2Puzzle, SqlExecutor,
 };
 use sage_wallet::PeerApi;
 use sage_wallet::prelude::*;
 #[cfg(feature = "native")]
-use sage_wallet::{Status, submit_to_peers};
+use sage_wallet::{Status, SyncCommand, Transaction, insert_transaction, submit_to_peers};
 #[cfg(feature = "native")]
 use tracing::{debug, info, warn};
 
 use crate::{
-    Error, Result, Sage, parse_asset_id, parse_did_id, parse_nft_id, parse_public_key,
-    parse_signature_message,
+    Error, Result, Sage, parse_asset_id, parse_coin_id, parse_did_id, parse_hash, parse_nft_id,
+    parse_program, parse_public_key, parse_signature, parse_signature_message,
 };
-use crate::{parse_coin_id, parse_hash, parse_program, parse_signature};
 
 impl<E: SqlExecutor> Sage<E> {
     pub async fn filter_unlocked_coins(
@@ -143,7 +145,7 @@ impl<E: SqlExecutor> Sage<E> {
                 coin: wallet_connect::Coin {
                     parent_coin_info: hex::encode(row.coin.parent_coin_info),
                     puzzle_hash: hex::encode(row.coin.puzzle_hash),
-                    amount: row.coin.amount,
+                    amount: Amount::u64(row.coin.amount),
                 },
                 coin_name: hex::encode(row.coin.coin_id()),
                 puzzle: hex::encode(ctx.serialize(&puzzle)?),
@@ -154,12 +156,12 @@ impl<E: SqlExecutor> Sage<E> {
                     Some(Proof::Eve(proof)) => Some(LineageProof {
                         parent_name: Some(hex::encode(proof.parent_parent_coin_info)),
                         inner_puzzle_hash: None,
-                        amount: Some(proof.parent_amount),
+                        amount: Some(Amount::u64(proof.parent_amount)),
                     }),
                     Some(Proof::Lineage(proof)) => Some(LineageProof {
                         parent_name: Some(hex::encode(proof.parent_parent_coin_info)),
                         inner_puzzle_hash: Some(hex::encode(proof.parent_inner_puzzle_hash)),
-                        amount: Some(proof.parent_amount),
+                        amount: Some(Amount::u64(proof.parent_amount)),
                     }),
                 },
             });
@@ -242,9 +244,7 @@ impl<E: SqlExecutor> Sage<E> {
             signature: hex::encode(signature.to_bytes()),
         })
     }
-}
 
-impl<E: SqlExecutor> Sage<E> {
     /// Broadcasts a bundle a site built and signed itself, and records it as
     /// pending so the wallet shows it until a sync confirms or fails it. This
     /// is the CHIP-0002 `sendTransaction` endpoint, and the only way a dApp can
@@ -284,10 +284,7 @@ impl Sage {
     ) -> Result<SendTransactionImmediatelyResponse> {
         // TODO: Should this be the normal way of sending transactions?
 
-        // Fail before broadcasting anything if there is no wallet to record
-        // the transaction against.
-        self.wallet()?;
-
+        let wallet = self.wallet()?;
         let spend_bundle = rust_bundle(req.spend_bundle)?;
         let peers = self.peer_state.lock().await.peers();
 
@@ -297,7 +294,28 @@ impl Sage {
 
         match submit_to_peers(&peers, spend_bundle.clone()).await? {
             Status::Pending => {
-                self.submit(spend_bundle).await?;
+                let peer = self
+                    .peer_state
+                    .lock()
+                    .await
+                    .acquire_peer()
+                    .ok_or(Error::NoPeers)?;
+
+                let subscriptions = insert_transaction(
+                    &wallet.db,
+                    &peer,
+                    wallet.genesis_challenge,
+                    spend_bundle.name(),
+                    Transaction::from_coin_spends(spend_bundle.coin_spends)?,
+                    spend_bundle.aggregated_signature,
+                )
+                .await?;
+
+                self.command_sender
+                    .send(SyncCommand::SubscribeCoins {
+                        coin_ids: subscriptions,
+                    })
+                    .await?;
 
                 info!("Successfully submitted and inserted transaction {transaction_id}");
 
@@ -348,6 +366,9 @@ fn rust_coin(coin: wallet_connect::Coin) -> Result<Coin> {
     Ok(Coin {
         parent_coin_info: parse_coin_id(coin.parent_coin_info)?,
         puzzle_hash: parse_hash(coin.puzzle_hash)?,
-        amount: coin.amount,
+        amount: coin
+            .amount
+            .to_u64()
+            .ok_or(Error::InvalidCoinAmount(coin.amount.to_string()))?,
     })
 }
