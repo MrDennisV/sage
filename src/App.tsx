@@ -220,7 +220,7 @@ function AppInner() {
     isLocaleInitialized && (
       <I18nProvider i18n={i18n}>
         <WalletProvider>
-          <RustThemeSync />
+          {supportsSageApps && <RustThemeSync />}
           <PeerProvider>
             {supportsSageApps ? (
               <AppsProvider>{content}</AppsProvider>
