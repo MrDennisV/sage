@@ -118,11 +118,17 @@ impl PeerApi for CoinsetPeer {
         header_hash: Bytes32,
         filters: CoinStateFilters,
     ) -> Result<RespondPuzzleState, WalletError> {
+        // `previous_height` asks for state changes since that height, which
+        // includes coins created long before it and spent after it. The REST
+        // API's `start_height` filters on the height a coin was created, so
+        // passing the cursor through would answer a different question and lose
+        // every spend of an older coin. Asking without it returns the full set,
+        // which is the only way to honour the contract here.
         let mut coin_records = self
             .client
             .get_coin_records_by_puzzle_hashes(
                 puzzle_hashes.clone(),
-                previous_height,
+                None,
                 None,
                 Some(filters.include_spent),
             )
@@ -141,7 +147,7 @@ impl PeerApi for CoinsetPeer {
                 .client
                 .get_coin_records_by_hints(
                     puzzle_hashes.clone(),
-                    previous_height,
+                    None,
                     None,
                     Some(filters.include_spent),
                 )

@@ -14,8 +14,7 @@ use sage_database::{AssetKind, OfferRow, OfferStatus, OfferedAsset, SqlExecutor}
 use sage_wallet::portable::unix_timestamp;
 use sage_wallet::prelude::*;
 use sage_wallet::{
-    Offered, Requested, RequestedCat, TakenOffer, Wallet, WalletError, aggregate_offers,
-    sort_offer,
+    Offered, Requested, RequestedCat, TakenOffer, Wallet, WalletError, aggregate_offers, sort_offer,
 };
 use tracing::debug;
 

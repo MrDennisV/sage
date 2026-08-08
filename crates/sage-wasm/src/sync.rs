@@ -3,11 +3,11 @@ use std::{
     sync::Arc,
 };
 
-use chia_protocol::Bytes32;
+use chia_protocol::{Bytes32, SpendBundle};
 use futures_util::future::join_all;
 use sage_api::NetworkKind;
 use sage_wallet::{
-    CoinsetPeer, EventSink, SyncEvent, Wallet, add_new_subscriptions, apply_synced_coins,
+    CoinsetPeer, EventSink, PeerApi, SyncEvent, Wallet, add_new_subscriptions, apply_synced_coins,
     download_nft_uris, fetch_puzzles, refresh_cat_catalog_page, sync_wallet,
 };
 use tracing::{debug, warn};
@@ -102,6 +102,10 @@ pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
 
     identify_puzzles(&wallet, &peer, &sink).await?;
 
+    fill_block_timestamps(&wallet, &peer, &sink).await;
+
+    resubmit_mempool_items(&wallet, &peer, &sink).await;
+
     // An unknown network has no MintGarden thumbnails to fall back on, which is
     // the only thing the flag decides here; the content itself still downloads.
     download_nft_content(&wallet, catalog_network.unwrap_or(false), &sink).await;
@@ -110,8 +114,11 @@ pub async fn sage_sync_once(delta_sync: bool) -> Result<String, JsValue> {
         refresh_cat_catalog(&wallet, testnet, &sink).await;
     }
 
-    let events: Vec<sage_api::SyncEvent> =
-        sink.into_events().into_iter().map(to_api_event).collect();
+    let events: Vec<sage_api::SyncEvent> = sink
+        .into_events()
+        .into_iter()
+        .filter_map(to_api_event)
+        .collect();
 
     serde_json::to_string(&events).map_err(js_error)
 }
@@ -212,6 +219,169 @@ async fn identify_puzzles(
     }
 
     Ok(())
+}
+
+/// How long a transaction waits before it is rebroadcast.
+const RESUBMIT_AFTER_SECONDS: i64 = 120;
+
+/// How many transactions to rebroadcast per pass. Small, because each one is a
+/// round trip and the pass holds the wallet while it runs.
+const RESUBMIT_LIMIT: i64 = 3;
+
+/// Rebroadcasts transactions the node has not confirmed yet, and drops the ones
+/// it refuses. Natively this is a queue of its own; without it a transaction
+/// that never reached a node stays recorded forever, and since `owned_coins`
+/// excludes anything still tied to a mempool item, the coins it reserved stay
+/// invisible.
+async fn resubmit_mempool_items(
+    wallet: &Arc<Wallet<BrowserExecutor>>,
+    peer: &CoinsetPeer,
+    sink: &CollectorSink,
+) {
+    let items = match wallet
+        .db
+        .mempool_items_to_submit(RESUBMIT_AFTER_SECONDS, RESUBMIT_LIMIT)
+        .await
+    {
+        Ok(items) => items,
+        Err(error) => {
+            debug!("Failed to read transactions awaiting rebroadcast: {error}");
+            return;
+        }
+    };
+
+    for item in items {
+        let coin_spends = match wallet.db.mempool_coin_spends(item.hash).await {
+            Ok(coin_spends) => coin_spends,
+            Err(error) => {
+                debug!(
+                    "Failed to read spends for transaction {}: {error}",
+                    item.hash
+                );
+                continue;
+            }
+        };
+
+        let spend_bundle = SpendBundle::new(coin_spends, item.aggregated_signature);
+        let transaction_id = spend_bundle.name();
+
+        let ack = match peer.send_transaction(spend_bundle).await {
+            Ok(ack) => ack,
+            Err(error) => {
+                // The node was unreachable rather than refusing, so the
+                // transaction stands and the next pass tries again.
+                debug!("Failed to rebroadcast transaction {transaction_id}: {error}");
+                continue;
+            }
+        };
+
+        if ack.status == 1 {
+            if let Err(error) = wallet.db.update_mempool_item_time(item.hash).await {
+                debug!("Failed to record rebroadcast of {transaction_id}: {error}");
+                continue;
+            }
+
+            sink.send_event(SyncEvent::TransactionUpdated { transaction_id })
+                .await;
+
+            continue;
+        }
+
+        if let Err(error) = drop_refused_transaction(wallet, item.hash).await {
+            debug!("Failed to drop refused transaction {transaction_id}: {error}");
+            continue;
+        }
+
+        sink.send_event(SyncEvent::TransactionFailed {
+            transaction_id,
+            error: ack.error,
+        })
+        .await;
+    }
+}
+
+/// Removes a refused transaction and marks the coins it spent as needing to be
+/// looked at again, in one transaction so neither half can be left behind.
+async fn drop_refused_transaction(
+    wallet: &Arc<Wallet<BrowserExecutor>>,
+    mempool_item_id: Bytes32,
+) -> Result<(), sage_database::DatabaseError> {
+    let mut tx = wallet.db.tx().await?;
+    tx.set_transaction_children_unsynced(mempool_item_id)
+        .await?;
+    tx.remove_mempool_item(mempool_item_id).await?;
+    tx.commit().await
+}
+
+/// How many block heights to look up per round.
+const BLOCK_BATCH_SIZE: u32 = 30;
+
+/// How long one pass may spend filling in block timestamps.
+const BLOCK_TIME_BUDGET_MS: f64 = 1_500.0;
+
+/// Records when the blocks a coin was created and spent in were farmed, which
+/// is what the interface shows instead of a bare height. The node answers this
+/// alongside the coin state, but the REST API needs a request per block, so
+/// natively this is a queue of its own; here it shares the sync pass and works
+/// in rounds until its budget runs out.
+async fn fill_block_timestamps(
+    wallet: &Arc<Wallet<BrowserExecutor>>,
+    peer: &CoinsetPeer,
+    sink: &CollectorSink,
+) {
+    let deadline = js_sys::Date::now() + BLOCK_TIME_BUDGET_MS;
+    let mut recorded = false;
+
+    loop {
+        if js_sys::Date::now() >= deadline {
+            MORE_WORK.set(true);
+            break;
+        }
+
+        let heights = match wallet.db.unsynced_blocks(BLOCK_BATCH_SIZE).await {
+            Ok(heights) if heights.is_empty() => break,
+            Ok(heights) => heights,
+            Err(error) => {
+                debug!("Failed to read blocks awaiting a timestamp: {error}");
+                break;
+            }
+        };
+
+        for chunk in heights.chunks(CONCURRENT_REQUESTS) {
+            let results = join_all(chunk.iter().map(|&height| peer.block_timestamp(height))).await;
+
+            for (&height, result) in chunk.iter().zip(results) {
+                let (header_hash, timestamp) = match result {
+                    Ok(block) => block,
+                    Err(error) => {
+                        // A height that cannot be read stays unsynced and is
+                        // retried next pass, so one bad block does not stall
+                        // the rest.
+                        debug!("Failed to fetch timestamp for block {height}: {error}");
+                        continue;
+                    }
+                };
+
+                let Ok(timestamp) = i64::try_from(timestamp) else {
+                    debug!("Block {height} reported an out of range timestamp");
+                    continue;
+                };
+
+                match wallet
+                    .db
+                    .insert_block(height, header_hash, Some(timestamp), false)
+                    .await
+                {
+                    Ok(()) => recorded = true,
+                    Err(error) => debug!("Failed to record block {height}: {error}"),
+                }
+            }
+        }
+    }
+
+    if recorded {
+        sink.send_event(SyncEvent::CoinsUpdated).await;
+    }
 }
 
 /// How many URIs to download per round. Small, because each one is a whole
@@ -320,9 +490,10 @@ async fn refresh_cat_catalog(
 }
 
 /// Mirrors the native mapping in `src-tauri/src/app_state.rs` so the frontend
-/// adapter can re-broadcast events with the exact same wire shape.
-fn to_api_event(event: SyncEvent) -> sage_api::SyncEvent {
-    match event {
+/// adapter can re-broadcast events with the exact same wire shape. Events the
+/// native side drops rather than emits map to `None`.
+fn to_api_event(event: SyncEvent) -> Option<sage_api::SyncEvent> {
+    Some(match event {
         SyncEvent::Start(ip) => sage_api::SyncEvent::Start { ip: ip.to_string() },
         SyncEvent::Stop => sage_api::SyncEvent::Stop,
         SyncEvent::Subscribed => sage_api::SyncEvent::Subscribed,
@@ -341,5 +512,9 @@ fn to_api_event(event: SyncEvent) -> sage_api::SyncEvent {
         SyncEvent::CatInfo => sage_api::SyncEvent::CatInfo,
         SyncEvent::DidInfo => sage_api::SyncEvent::DidInfo,
         SyncEvent::NftData => sage_api::SyncEvent::NftData,
-    }
+
+        // Only the native sync manager emits this, and it consumes it to
+        // reconfigure the apps host rather than passing it to the interface.
+        SyncEvent::NetworkChanged { .. } => return None,
+    })
 }
