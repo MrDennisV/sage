@@ -94,8 +94,12 @@ function ThemeAwareToastContainer() {
 }
 
 const currentPlatform = platform();
+// The apps host is part of the desktop shell, so the browser has nothing to
+// answer the commands the provider and the page send.
 const supportsSageApps =
-  currentPlatform !== 'android' && currentPlatform !== 'ios';
+  !__IS_EXTENSION__ &&
+  currentPlatform !== 'android' &&
+  currentPlatform !== 'ios';
 
 const router = createHashRouter(
   createRoutesFromElements(
@@ -202,6 +206,15 @@ function AppInner() {
     void initLocale();
   }, [locale]);
 
+  const content = (
+    <WalletConnectProvider>
+      <PriceProvider>
+        <RouterProvider router={router} />
+        {__IS_EXTENSION__ && <DappRequestProvider />}
+      </PriceProvider>
+    </WalletConnectProvider>
+  );
+
   return (
     initialized &&
     isLocaleInitialized && (
@@ -209,14 +222,11 @@ function AppInner() {
         <WalletProvider>
           <RustThemeSync />
           <PeerProvider>
-            <AppsProvider>
-              <WalletConnectProvider>
-                <PriceProvider>
-                  <RouterProvider router={router} />
-                  {__IS_EXTENSION__ && <DappRequestProvider />}
-                </PriceProvider>
-              </WalletConnectProvider>
-            </AppsProvider>
+            {supportsSageApps ? (
+              <AppsProvider>{content}</AppsProvider>
+            ) : (
+              content
+            )}
           </PeerProvider>
         </WalletProvider>
       </I18nProvider>
