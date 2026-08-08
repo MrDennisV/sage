@@ -7,7 +7,9 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-sage = { workspace = true }
+# The apps host only ever runs inside the desktop app, and `sage` is pulled in
+# without default features so the browser build can leave the native half out.
+sage = { workspace = true, features = ["native"] }
 sage-api = { workspace = true, features = ["tauri"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
