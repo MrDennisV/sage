@@ -50,6 +50,11 @@ window.addEventListener('message', async (event) => {
 // Forward sync events from service worker to the page
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'SAGE_EVENT') {
+    // An event meant for one site still reaches every tab, because the worker
+    // cannot read a tab's url without the `tabs` permission. Only this page
+    // knows its own origin, so it is the one that decides.
+    if (message.origin && message.origin !== window.location.origin) return;
+
     window.postMessage(
       {
         type: 'SAGE_EVENT',

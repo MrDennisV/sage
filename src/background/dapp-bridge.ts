@@ -17,6 +17,7 @@ import {
 import {
   grantOrigin,
   isOriginPermitted,
+  listOrigins,
   revokeOrigin,
 } from './permission-manager';
 
@@ -450,7 +451,7 @@ async function handleNativeMethod(
 ): Promise<unknown> {
   switch (method) {
     case 'disconnect':
-      await revokeOrigin(origin);
+      await disconnectOrigin(origin);
       return null;
     case 'walletSwitchChain':
       return switchChain(params);
@@ -538,8 +539,17 @@ async function handleDappRequest(
 
 // ─── Events ─────────────────────────────────────────────────────────
 
-/** Tells every page's provider that the wallet or the network moved. */
-export async function broadcastEvent(eventName: string): Promise<void> {
+/**
+ * Tells every page's provider that the wallet or the network moved. An event
+ * meant for one site still goes to every tab, because reading a tab's url takes
+ * the `tabs` permission; `origin` names who it is for and the content script,
+ * which knows its own, drops the rest.
+ */
+export async function broadcastEvent(
+  eventName: string,
+  data?: unknown,
+  origin?: string,
+): Promise<void> {
   const tabs = await chrome.tabs.query({});
 
   await Promise.all(
@@ -547,12 +557,26 @@ export async function broadcastEvent(eventName: string): Promise<void> {
       tab.id === undefined
         ? Promise.resolve()
         : chrome.tabs
-            .sendMessage(tab.id, { type: 'SAGE_EVENT', eventName })
+            .sendMessage(tab.id, {
+              type: 'SAGE_EVENT',
+              eventName,
+              data,
+              origin,
+            })
             .catch(() => {
               // No content script on that tab.
             }),
     ),
   );
+}
+
+/**
+ * Revokes a site and tells it, so it stops believing it is connected instead of
+ * finding out on its next call.
+ */
+export async function disconnectOrigin(origin: string): Promise<void> {
+  await revokeOrigin(origin);
+  await broadcastEvent('disconnect', null, origin);
 }
 
 // ─── Wiring ─────────────────────────────────────────────────────────
@@ -611,6 +635,24 @@ export function installDappBridge(walletRuntime: WalletRuntime): void {
           console.warn(`dApp request ${message.method} failed:`, reason);
           sendResponse({ error: reason });
         });
+
+      return true;
+    }
+
+    // Grants live in chrome.storage rather than the wallet database, so the
+    // settings page asks for them here instead of through a command.
+    if (message?.type === 'DAPP_LIST') {
+      listOrigins()
+        .then((origins) => sendResponse({ data: origins }))
+        .catch((error) => sendResponse({ error: String(error) }));
+
+      return true;
+    }
+
+    if (message?.type === 'DAPP_REVOKE') {
+      disconnectOrigin(message.origin)
+        .then(() => sendResponse({ data: null }))
+        .catch((error) => sendResponse({ error: String(error) }));
 
       return true;
     }

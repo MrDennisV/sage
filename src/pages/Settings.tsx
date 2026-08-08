@@ -59,12 +59,19 @@ import { getVersion } from '@tauri-apps/api/app';
 import { platform } from '@tauri-apps/plugin-os';
 import {
   DownloadIcon,
+  Globe,
   LoaderCircleIcon,
   TrashIcon,
   WalletIcon,
 } from 'lucide-react';
 import prettyBytes from 'pretty-bytes';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -165,6 +172,7 @@ export default function Settings() {
               <TabsContent value='general'>
                 <div className='grid gap-4'>
                   <WalletConnectSettings />
+                  {__IS_EXTENSION__ && <ConnectedSitesSettings />}
                   <GlobalSettings />
                 </div>
               </TabsContent>
@@ -467,6 +475,33 @@ function TimeInput({ label, value, onChange }: TimeInputProps) {
   );
 }
 
+/**
+ * One connected thing and the button that ends it. WalletConnect sessions and
+ * websites are different underneath — a relay pairing against a stored grant —
+ * but they read the same, so the row is shared and the sections are not.
+ */
+function ConnectionRow({
+  icon,
+  name,
+  onDisconnect,
+}: {
+  icon: ReactNode;
+  name: string;
+  onDisconnect: () => void;
+}) {
+  return (
+    <div className='px-4 py-4 flex items-center justify-between gap-4'>
+      <div className='flex gap-3 items-center min-w-0'>
+        {icon}
+        <span className='font-medium truncate'>{name}</span>
+      </div>
+      <Button variant='destructive' size='icon' onClick={onDisconnect}>
+        <TrashIcon className='h-4 w-4' />
+      </Button>
+    </div>
+  );
+}
+
 function WalletConnectSettings() {
   const { pair, sessions, disconnect, connecting } = useWalletConnect();
   const [uri, setUri] = useState<string>('');
@@ -489,28 +524,18 @@ function WalletConnectSettings() {
     <SettingsSection title={t`WalletConnect`}>
       {sessions.length > 0 ? (
         sessions.map((session) => (
-          <div
+          <ConnectionRow
             key={session.topic}
-            className='px-4 py-4 flex items-center justify-between gap-4'
-          >
-            <div className='flex gap-3 items-center'>
+            icon={
               <img
                 src={session.peer?.metadata?.icons?.[0] ?? ''}
                 alt={session.peer?.metadata?.name ?? t`Unknown App`}
-                className='h-8 w-8 rounded-full'
+                className='h-8 w-8 rounded-full flex-shrink-0'
               />
-              <span className='font-medium'>
-                {session.peer?.metadata?.name ?? t`Unknown App`}
-              </span>
-            </div>
-            <Button
-              variant='destructive'
-              size='icon'
-              onClick={() => disconnect(session.topic)}
-            >
-              <TrashIcon className='h-4 w-4' />
-            </Button>
-          </div>
+            }
+            name={session.peer?.metadata?.name ?? t`Unknown App`}
+            onDisconnect={() => disconnect(session.topic)}
+          />
         ))
       ) : (
         <div className='p-3 text-sm text-muted-foreground'>
@@ -543,6 +568,62 @@ function WalletConnectSettings() {
       </div>
     </SettingsSection>
   );
+}
+
+/**
+ * Websites that were granted access through `chip0002_connect`. Only the origin
+ * and when it was granted are recorded, so the row shows the host and nothing
+ * else; the grant carries no name or icon to display.
+ */
+function ConnectedSitesSettings() {
+  const [origins, setOrigins] = useState<string[]>([]);
+
+  useEffect(() => {
+    chrome.runtime
+      .sendMessage({ type: 'DAPP_LIST' })
+      .then((response) => setOrigins(response?.data ?? []))
+      .catch((error) => console.error('Failed to list connected sites', error));
+  }, []);
+
+  const disconnect = (origin: string) => {
+    chrome.runtime
+      .sendMessage({ type: 'DAPP_REVOKE', origin })
+      .then(() => setOrigins((current) => current.filter((o) => o !== origin)))
+      .catch((error) => console.error('Failed to disconnect site', error));
+  };
+
+  return (
+    <SettingsSection title={t`Connected Sites`}>
+      {origins.length > 0 ? (
+        origins.map((origin) => (
+          <ConnectionRow
+            key={origin}
+            icon={
+              <Globe
+                className='h-8 w-8 p-1.5 rounded-full bg-muted flex-shrink-0'
+                aria-hidden='true'
+              />
+            }
+            name={hostOf(origin)}
+            onDisconnect={() => disconnect(origin)}
+          />
+        ))
+      ) : (
+        <div className='p-3 text-sm text-muted-foreground'>
+          <Trans>No connected sites</Trans>
+        </div>
+      )}
+    </SettingsSection>
+  );
+}
+
+/** Falls back to the whole origin when it is not a url we can shorten. */
+function hostOf(origin: string) {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
 }
 
 /** Mirrors the fallback the wallet uses when a network has no API URL set. */

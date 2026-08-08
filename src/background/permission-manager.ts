@@ -39,6 +39,10 @@ export async function isOriginPermitted(origin: string): Promise<boolean> {
   return origin in (await readGrants());
 }
 
+export async function listOrigins(): Promise<string[]> {
+  return Object.keys(await readGrants());
+}
+
 export function grantOrigin(origin: string): Promise<void> {
   return updateGrants((grants) => ({
     ...grants,
