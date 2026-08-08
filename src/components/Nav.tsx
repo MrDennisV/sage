@@ -4,6 +4,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { usePeers } from '@/hooks/usePeers';
+import { supportsSageApps } from '@/lib/platform';
 import { logoutAndUpdateState, useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -35,7 +36,6 @@ export function TopNav({ isCollapsed }: NavProps) {
   const className = isCollapsed ? 'h-5 w-5' : 'h-4 w-4';
 
   const isIos = platform() === 'ios';
-  const isMobile = platform() === 'android' || isIos;
 
   return (
     <nav
@@ -112,7 +112,7 @@ export function TopNav({ isCollapsed }: NavProps) {
       >
         <ArrowDownUp className={className} />
       </NavLink>
-      {!isMobile && (
+      {supportsSageApps && (
         <NavLink
           url={'/apps'}
           isCollapsed={isCollapsed}

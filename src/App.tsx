@@ -62,7 +62,7 @@ import Wallet from './pages/Wallet';
 import { AppsProvider } from '@/contexts/AppsContext.tsx';
 import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
-import { platform } from '@tauri-apps/plugin-os';
+import { supportsSageApps } from '@/lib/platform';
 
 // Theme-aware toast container component
 function ThemeAwareToastContainer() {
@@ -92,14 +92,6 @@ function ThemeAwareToastContainer() {
     />
   );
 }
-
-const currentPlatform = platform();
-// The apps host is part of the desktop shell, so the browser has nothing to
-// answer the commands the provider and the page send.
-const supportsSageApps =
-  !__IS_EXTENSION__ &&
-  currentPlatform !== 'android' &&
-  currentPlatform !== 'ios';
 
 const router = createHashRouter(
   createRoutesFromElements(
