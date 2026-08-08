@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO offer_assets (offer_id, asset_id, amount, royalty, is_requested) \nVALUES (\n    (SELECT id FROM offers WHERE hash = ?), \n    (SELECT id FROM assets WHERE hash = ?), \n    ?, ?, ?\n)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "5a0f59bf911807895e07f0ae229558645927aad66a6efa7cb6f684e94495b950"
+}

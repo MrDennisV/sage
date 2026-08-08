@@ -5,24 +5,30 @@ use std::{
     num::{ParseIntError, TryFromIntError},
 };
 
-use chia_wallet_sdk::{
-    client::ClientError,
-    clvm_traits::{FromClvmError, ToClvmError},
-    clvmr::error::EvalErr,
-    prelude::*,
-    utils::Bech32Error,
-};
+use chia_protocol::Bytes32;
+use chia_sdk_driver::DriverError;
+use chia_sdk_utils::Bech32Error;
+#[cfg(feature = "native")]
+use chia_wallet_sdk::client::ClientError;
+use clvm_traits::{FromClvmError, ToClvmError};
+use clvmr::error::EvalErr;
 use hex::FromHexError;
 use sage_api::ErrorKind;
 use sage_assets::UriError;
 use sage_database::DatabaseError;
 use sage_keychain::KeychainError;
-use sage_wallet::{SyncCommand, WalletError};
+#[cfg(feature = "native")]
+use sage_wallet::SyncCommand;
+use sage_wallet::WalletError;
+#[cfg(feature = "native")]
 use sqlx::migrate::MigrateError;
 use thiserror::Error;
+#[cfg(feature = "native")]
 use tokio::{sync::mpsc::error::SendError, time::error::Elapsed};
 use tracing::{metadata::ParseLevelError, subscriber::SetGlobalDefaultError};
+#[cfg(feature = "native")]
 use tracing_appender::rolling::InitError;
+#[cfg(feature = "native")]
 use tracing_subscriber::util::TryInitError;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -41,6 +47,7 @@ pub enum Error {
     #[error("Database error: {0}")]
     Database(#[from] DatabaseError),
 
+    #[cfg(feature = "native")]
     #[error("Client error: {0}")]
     Client(#[from] ClientError),
 
@@ -50,6 +57,9 @@ pub enum Error {
     #[error("URI error: {0}")]
     Uri(#[from] UriError),
 
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+
     #[error("To CLVM error: {0}")]
     ToClvm(#[from] ToClvmError),
 
@@ -57,7 +67,7 @@ pub enum Error {
     FromClvm(#[from] FromClvmError),
 
     #[error("BLS error: {0}")]
-    Bls(#[from] chia_wallet_sdk::chia::bls::Error),
+    Bls(#[from] chia_bls::Error),
 
     #[error("BIP39 error: {0}")]
     Bip39(#[from] bip39::Error),
@@ -65,6 +75,7 @@ pub enum Error {
     #[error("Bech32m error: {0}")]
     Bech32m(#[from] bech32::Error),
 
+    #[cfg(feature = "native")]
     #[error("Send error: {0}")]
     Send(#[from] SendError<SyncCommand>),
 
@@ -80,9 +91,11 @@ pub enum Error {
     #[error("Bincode error: {0}")]
     Bincode(#[from] bincode::Error),
 
+    #[cfg(feature = "native")]
     #[error("Logging initialization error: {0}")]
     LogSubscriber(#[from] TryInitError),
 
+    #[cfg(feature = "native")]
     #[error("Logging initialization error: {0}")]
     LogAppender(#[from] InitError),
 
@@ -104,9 +117,11 @@ pub enum Error {
     #[error("Parse int error: {0}")]
     ParseInt(#[from] ParseIntError),
 
+    #[cfg(feature = "native")]
     #[error("SQLx error: {0}")]
     Sqlx(#[from] sqlx::Error),
 
+    #[cfg(feature = "native")]
     #[error("SQLx Migration error: {0}")]
     SqlxMigration(#[from] MigrateError),
 
@@ -209,6 +224,13 @@ pub enum Error {
     #[error("No peers are currently available")]
     NoPeers,
 
+    #[error("Transaction {transaction_id} was rejected with status {status}: {error:?}")]
+    TransactionRejected {
+        transaction_id: Bytes32,
+        status: u8,
+        error: Option<String>,
+    },
+
     #[error("Could not fetch NFT with id: {0}")]
     CouldNotFetchNft(Bytes32),
 
@@ -227,9 +249,25 @@ pub enum Error {
     #[error("Missing asset id")]
     MissingAssetId,
 
+    #[error("URI content can't be downloaded here, so its hash must be provided")]
+    MissingUriHash,
+
     #[error("Database version too old")]
     DatabaseVersionTooOld,
 
+    #[error("Store error: {0}")]
+    Store(String),
+
+    #[error("{0}")]
+    OfferCode(String),
+
+    /// Only the active wallet's database is mounted in the browser, so any
+    /// request naming a different wallet has to be refused instead of silently
+    /// acting on the wrong data.
+    #[error("Wallet {0} is not the active wallet, so its database isn't available")]
+    InactiveWallet(u32),
+
+    #[cfg(feature = "native")]
     #[error("Timeout")]
     Timeout(#[from] Elapsed),
 }
@@ -248,16 +286,22 @@ impl Error {
                 | KeychainError::Bip39(..)
                 | KeychainError::Argon2(..) => ErrorKind::Internal,
             },
-            Self::SqlxMigration(..) | Self::DatabaseVersionTooOld => ErrorKind::DatabaseMigration,
+            #[cfg(feature = "native")]
+            Self::SqlxMigration(..) => ErrorKind::DatabaseMigration,
+            Self::DatabaseVersionTooOld => ErrorKind::DatabaseMigration,
+            #[cfg(feature = "native")]
             Self::Send(..)
-            | Self::Io(..)
             | Self::Client(..)
             | Self::Sqlx(..)
+            | Self::LogAppender(..)
+            | Self::LogSubscriber(..)
+            | Self::Timeout(..) => ErrorKind::Internal,
+            Self::Io(..)
+            | Self::Http(..)
+            | Self::Store(..)
             | Self::Bip39(..)
             | Self::TomlDe(..)
             | Self::TomlSer(..)
-            | Self::LogAppender(..)
-            | Self::LogSubscriber(..)
             | Self::SetGlobalDefault(..)
             | Self::ParseLogLevel(..)
             | Self::Database(..)
@@ -266,8 +310,7 @@ impl Error {
             | Self::FromClvm(..)
             | Self::Bincode(..)
             | Self::Eval(..)
-            | Self::Driver(..)
-            | Self::Timeout(..) => ErrorKind::Internal,
+            | Self::Driver(..) => ErrorKind::Internal,
             Self::UnknownFingerprint
             | Self::UnknownNetwork
             | Self::MissingCoin(..)
@@ -278,7 +321,8 @@ impl Error {
             | Self::MissingDid(..)
             | Self::MissingNft(..)
             | Self::MissingOption(..)
-            | Self::MissingOffer(..) => ErrorKind::NotFound,
+            | Self::MissingOffer(..)
+            | Self::InactiveWallet(..) => ErrorKind::NotFound,
             Self::Bls(..)
             | Self::Hex(..)
             | Self::InvalidKey
@@ -302,15 +346,20 @@ impl Error {
             | Self::InvalidSignature(..)
             | Self::InvalidPublicKey(..)
             | Self::CoinSpent(..)
-            | Self::Uri(..)
             | Self::IpAddrParse(..)
             | Self::NoPeers
+            | Self::TransactionRejected { .. }
             | Self::CouldNotFetchNft(..)
             | Self::CouldNotFetchOption(..)
             | Self::MissingAssetId
+            | Self::MissingUriHash
             | Self::InvalidGroup
             | Self::InvalidThemeJson
+            | Self::Uri(..)
             | Self::MissingThemeData => ErrorKind::Api,
+            // Offer codes are scanned off physical cards, which is what the
+            // interface treats this kind as.
+            Self::OfferCode(..) => ErrorKind::Nfc,
         }
     }
 }

@@ -14,6 +14,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { ThemeProvider, useTheme } from 'theme-o-rama';
 import { useLocalStorage } from 'usehooks-ts';
 import { BiometricProvider } from './contexts/BiometricContext';
+import { DappRequestProvider } from './contexts/DappRequestContext';
 import { ErrorProvider } from './contexts/ErrorContext';
 import {
   getBrowserLanguage,
@@ -61,7 +62,7 @@ import Wallet from './pages/Wallet';
 import { AppsProvider } from '@/contexts/AppsContext.tsx';
 import { RustThemeSync } from '@/components/RustThemeSync.tsx';
 import { Apps } from '@/pages/Apps.tsx';
-import { platform } from '@tauri-apps/plugin-os';
+import { supportsSageApps } from '@/lib/platform';
 
 // Theme-aware toast container component
 function ThemeAwareToastContainer() {
@@ -91,10 +92,6 @@ function ThemeAwareToastContainer() {
     />
   );
 }
-
-const currentPlatform = platform();
-const supportsSageApps =
-  currentPlatform !== 'android' && currentPlatform !== 'ios';
 
 const router = createHashRouter(
   createRoutesFromElements(
@@ -201,20 +198,27 @@ function AppInner() {
     void initLocale();
   }, [locale]);
 
+  const content = (
+    <WalletConnectProvider>
+      <PriceProvider>
+        <RouterProvider router={router} />
+        {__IS_EXTENSION__ && <DappRequestProvider />}
+      </PriceProvider>
+    </WalletConnectProvider>
+  );
+
   return (
     initialized &&
     isLocaleInitialized && (
       <I18nProvider i18n={i18n}>
         <WalletProvider>
-          <RustThemeSync />
+          {supportsSageApps && <RustThemeSync />}
           <PeerProvider>
-            <AppsProvider>
-              <WalletConnectProvider>
-                <PriceProvider>
-                  <RouterProvider router={router} />
-                </PriceProvider>
-              </WalletConnectProvider>
-            </AppsProvider>
+            {supportsSageApps ? (
+              <AppsProvider>{content}</AppsProvider>
+            ) : (
+              content
+            )}
           </PeerProvider>
         </WalletProvider>
       </I18nProvider>

@@ -3,80 +3,41 @@ use crate::{
     parse_did_id, parse_nft_id, parse_option_id,
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
-use chia_wallet_sdk::chia::puzzle_types::nft::NftMetadata;
-use chia_wallet_sdk::prelude::*;
-use chia_wallet_sdk::{driver::BURN_PUZZLE_HASH, utils::Address};
+use chia_puzzle_types::nft::NftMetadata;
+use chia_sdk_driver::BURN_PUZZLE_HASH;
 use sage_api::{
     Amount, CheckAddress, CheckAddressResponse, CoinFilterMode as ApiCoinFilterMode, CoinRecord,
     CoinSortMode as ApiCoinSortMode, DerivationRecord, DidRecord, GetAllCats, GetAllCatsResponse,
     GetAreCoinsSpendable, GetAreCoinsSpendableResponse, GetCats, GetCatsResponse, GetCoins,
-    GetCoinsByIds, GetCoinsByIdsResponse, GetCoinsResponse, GetDatabaseStats,
-    GetDatabaseStatsResponse, GetDerivations, GetDerivationsResponse, GetDids, GetDidsResponse,
-    GetMinterDidIds, GetMinterDidIdsResponse, GetNft, GetNftCollection, GetNftCollectionResponse,
-    GetNftCollections, GetNftCollectionsResponse, GetNftData, GetNftDataResponse, GetNftIcon,
-    GetNftIconResponse, GetNftResponse, GetNftThumbnail, GetNftThumbnailResponse, GetNfts,
-    GetNftsResponse, GetOption, GetOptionResponse, GetOptions, GetOptionsResponse,
-    GetPendingTransactions, GetPendingTransactionsResponse, GetSpendableCoinCount,
-    GetSpendableCoinCountResponse, GetSyncStatus, GetSyncStatusResponse, GetToken,
-    GetTokenResponse, GetTransaction, GetTransactionResponse, GetTransactions,
+    GetCoinsByIds, GetCoinsByIdsResponse, GetCoinsResponse, GetDerivations, GetDerivationsResponse,
+    GetDids, GetDidsResponse, GetMinterDidIds, GetMinterDidIdsResponse, GetNft, GetNftCollection,
+    GetNftCollectionResponse, GetNftCollections, GetNftCollectionsResponse, GetNftData,
+    GetNftDataResponse, GetNftIcon, GetNftIconResponse, GetNftResponse, GetNftThumbnail,
+    GetNftThumbnailResponse, GetNfts, GetNftsResponse, GetOption, GetOptionResponse, GetOptions,
+    GetOptionsResponse, GetPendingTransactions, GetPendingTransactionsResponse,
+    GetSpendableCoinCount, GetSpendableCoinCountResponse, GetSyncStatus, GetSyncStatusResponse,
+    GetToken, GetTokenResponse, GetTransaction, GetTransactionResponse, GetTransactions,
     GetTransactionsResponse, GetVersion, GetVersionResponse, IsAssetOwned, IsAssetOwnedResponse,
     NftCollectionRecord, NftData, NftRecord, NftSortMode as ApiNftSortMode, NftSpecialUseType,
-    OptionRecord, OptionSortMode as ApiOptionSortMode, PendingTransactionRecord,
-    PerformDatabaseMaintenance, PerformDatabaseMaintenanceResponse, TokenRecord,
+    OptionRecord, OptionSortMode as ApiOptionSortMode, PendingTransactionRecord, TokenRecord,
     TransactionCoinRecord, TransactionRecord,
+};
+#[cfg(feature = "native")]
+use sage_api::{
+    GetDatabaseStats, GetDatabaseStatsResponse, PerformDatabaseMaintenance,
+    PerformDatabaseMaintenanceResponse,
 };
 use sage_database::{
     AssetFilter, CoinFilterMode, CoinSortMode, NftGroupSearch, NftRow, NftSortMode, OptionSortMode,
-    Transaction, TransactionCoin,
+    SqlExecutor, Transaction, TransactionCoin,
 };
+use sage_wallet::prelude::*;
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub fn get_version(&self, _req: GetVersion) -> Result<GetVersionResponse> {
         Ok(GetVersionResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
         })
-    }
-
-    pub async fn perform_database_maintenance(
-        &self,
-        req: PerformDatabaseMaintenance,
-    ) -> Result<PerformDatabaseMaintenanceResponse> {
-        let wallet = self.wallet()?;
-        let stats = wallet
-            .db
-            .perform_sqlite_maintenance(req.force_vacuum)
-            .await?;
-
-        let response = PerformDatabaseMaintenanceResponse {
-            vacuum_duration_ms: stats.vacuum_duration_ms,
-            analyze_duration_ms: stats.analyze_duration_ms,
-            wal_checkpoint_duration_ms: stats.wal_checkpoint_duration_ms,
-            total_duration_ms: stats.total_duration_ms,
-            pages_vacuumed: stats.pages_vacuumed,
-            wal_pages_checkpointed: stats.wal_pages_checkpointed,
-        };
-
-        Ok(response)
-    }
-
-    pub async fn get_database_stats(
-        &self,
-        _req: GetDatabaseStats,
-    ) -> Result<GetDatabaseStatsResponse> {
-        let wallet = self.wallet()?;
-        let stats = wallet.db.get_database_stats().await?;
-
-        let response = GetDatabaseStatsResponse {
-            total_pages: stats.total_pages,
-            free_pages: stats.free_pages,
-            free_percentage: stats.free_percentage,
-            page_size: stats.page_size,
-            database_size_bytes: stats.database_size_bytes,
-            free_space_bytes: stats.free_space_bytes,
-            wal_pages: stats.wal_pages,
-        };
-
-        Ok(response)
     }
 
     pub async fn get_sync_status(&self, _req: GetSyncStatus) -> Result<GetSyncStatusResponse> {
@@ -91,11 +52,12 @@ impl Sage {
         let receive_address =
             Address::new(change_p2_puzzle_hash, self.network().prefix()).encode()?;
 
-        let database_size = self
-            .wallet_db_path(wallet.fingerprint)
-            .ok()
-            .and_then(|path| path.metadata().ok())
-            .map_or(0, |metadata| metadata.len());
+        #[cfg(feature = "native")]
+        let database_size = self.database_size(wallet.fingerprint);
+
+        // The browser database isn't a file whose size can be measured.
+        #[cfg(not(feature = "native"))]
+        let database_size = 0;
 
         Ok(GetSyncStatusResponse {
             selectable_balance: Amount::u128(selectable_balance),
@@ -895,5 +857,51 @@ impl Sage {
             spent,
             created,
         })
+    }
+}
+
+// Maintenance and page statistics are specific to the SQLite driver.
+#[cfg(feature = "native")]
+impl Sage {
+    pub async fn perform_database_maintenance(
+        &self,
+        req: PerformDatabaseMaintenance,
+    ) -> Result<PerformDatabaseMaintenanceResponse> {
+        let wallet = self.wallet()?;
+        let stats = wallet
+            .db
+            .perform_sqlite_maintenance(req.force_vacuum)
+            .await?;
+
+        let response = PerformDatabaseMaintenanceResponse {
+            vacuum_duration_ms: stats.vacuum_duration_ms,
+            analyze_duration_ms: stats.analyze_duration_ms,
+            wal_checkpoint_duration_ms: stats.wal_checkpoint_duration_ms,
+            total_duration_ms: stats.total_duration_ms,
+            pages_vacuumed: stats.pages_vacuumed,
+            wal_pages_checkpointed: stats.wal_pages_checkpointed,
+        };
+
+        Ok(response)
+    }
+
+    pub async fn get_database_stats(
+        &self,
+        _req: GetDatabaseStats,
+    ) -> Result<GetDatabaseStatsResponse> {
+        let wallet = self.wallet()?;
+        let stats = wallet.db.get_database_stats().await?;
+
+        let response = GetDatabaseStatsResponse {
+            total_pages: stats.total_pages,
+            free_pages: stats.free_pages,
+            free_percentage: stats.free_percentage,
+            page_size: stats.page_size,
+            database_size_bytes: stats.database_size_bytes,
+            free_space_bytes: stats.free_space_bytes,
+            wal_pages: stats.wal_pages,
+        };
+
+        Ok(response)
     }
 }

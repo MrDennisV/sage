@@ -140,6 +140,27 @@ pub struct SetNetworkOverride {
     pub name: Option<String>,
 }
 
+/// Set the API endpoint used for a network
+#[cfg_attr(
+    feature = "openapi",
+    crate::openapi_attr(
+        tag = "Network Settings",
+        description = "Set the base URL of the RPC API used for a network.",
+        response_type = "EmptyResponse"
+    )
+)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "tauri", derive(specta::Type))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct SetNetworkApiUrl {
+    /// Network name to configure
+    #[cfg_attr(feature = "openapi", schema(example = "mainnet"))]
+    pub name: String,
+    /// API base URL (null to restore the default)
+    #[cfg_attr(feature = "openapi", schema(example = "https://api.coinset.org"))]
+    pub api_url: Option<String>,
+}
+
 /// List available networks
 #[cfg_attr(
     feature = "openapi",
@@ -259,6 +280,7 @@ pub type SetDiscoverPeersResponse = EmptyResponse;
 pub type SetTargetPeersResponse = EmptyResponse;
 pub type SetNetworkResponse = EmptyResponse;
 pub type SetNetworkOverrideResponse = EmptyResponse;
+pub type SetNetworkApiUrlResponse = EmptyResponse;
 pub type SetDeltaSyncResponse = EmptyResponse;
 pub type SetDeltaSyncOverrideResponse = EmptyResponse;
 pub type SetChangeAddressResponse = EmptyResponse;

@@ -317,3 +317,91 @@ impl WalletPeer {
         ))
     }
 }
+
+impl crate::PeerApi for WalletPeer {
+    async fn subscribe_coins(
+        &self,
+        coin_ids: Vec<Bytes32>,
+        previous_height: Option<u32>,
+        header_hash: Bytes32,
+    ) -> Result<Vec<CoinState>, WalletError> {
+        WalletPeer::subscribe_coins(self, coin_ids, previous_height, header_hash).await
+    }
+
+    async fn subscribe_puzzles(
+        &self,
+        puzzle_hashes: Vec<Bytes32>,
+        previous_height: Option<u32>,
+        header_hash: Bytes32,
+        filters: CoinStateFilters,
+    ) -> Result<RespondPuzzleState, WalletError> {
+        WalletPeer::subscribe_puzzles(self, puzzle_hashes, previous_height, header_hash, filters)
+            .await
+    }
+
+    async fn fetch_coin(
+        &self,
+        coin_id: Bytes32,
+        genesis_challenge: Bytes32,
+    ) -> Result<CoinState, WalletError> {
+        WalletPeer::fetch_coin(self, coin_id, genesis_challenge).await
+    }
+
+    async fn fetch_coins(
+        &self,
+        coin_ids: Vec<Bytes32>,
+        genesis_challenge: Bytes32,
+    ) -> Result<Vec<CoinState>, WalletError> {
+        WalletPeer::fetch_coins(self, coin_ids, genesis_challenge).await
+    }
+
+    async fn fetch_optional_coin(
+        &self,
+        coin_id: Bytes32,
+        genesis_challenge: Bytes32,
+    ) -> Result<Option<CoinState>, WalletError> {
+        WalletPeer::fetch_optional_coin(self, coin_id, genesis_challenge).await
+    }
+
+    async fn fetch_optional_coin_spend(
+        &self,
+        coin_id: Bytes32,
+        genesis_challenge: Bytes32,
+    ) -> Result<Option<CoinSpend>, WalletError> {
+        WalletPeer::fetch_optional_coin_spend(self, coin_id, genesis_challenge).await
+    }
+
+    async fn fetch_puzzle_solution(
+        &self,
+        coin_id: Bytes32,
+        spent_height: u32,
+    ) -> Result<(Program, Program), WalletError> {
+        WalletPeer::fetch_puzzle_solution(self, coin_id, spent_height).await
+    }
+
+    async fn fetch_coin_spend(
+        &self,
+        coin_id: Bytes32,
+        genesis_challenge: Bytes32,
+    ) -> Result<CoinSpend, WalletError> {
+        WalletPeer::fetch_coin_spend(self, coin_id, genesis_challenge).await
+    }
+
+    async fn try_fetch_singleton_child(
+        &self,
+        coin_id: Bytes32,
+    ) -> Result<Option<CoinState>, WalletError> {
+        WalletPeer::try_fetch_singleton_child(self, coin_id).await
+    }
+
+    async fn send_transaction(
+        &self,
+        spend_bundle: SpendBundle,
+    ) -> Result<TransactionAck, WalletError> {
+        WalletPeer::send_transaction(self, spend_bundle).await
+    }
+
+    async fn block_timestamp(&self, height: u32) -> Result<(Bytes32, u64), WalletError> {
+        WalletPeer::block_timestamp(self, height).await
+    }
+}

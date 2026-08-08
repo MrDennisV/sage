@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT hash, minter_hash FROM nfts INNER JOIN assets ON assets.id = asset_id WHERE metadata_hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "minter_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "2e058c8794373e60866d027e79a5f07bd5c5bb2b1c84de9fbeaac3185aeae264"
+}

@@ -1,0 +1,1 @@
+DELETE FROM p2_puzzles

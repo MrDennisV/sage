@@ -1,4 +1,4 @@
-use chia_wallet_sdk::prelude::*;
+use chia_protocol::Bytes32;
 use thiserror::Error;
 
 use crate::ThumbnailError;
@@ -19,6 +19,9 @@ pub enum UriError {
 
     #[error("No URIs provided")]
     NoUris,
+
+    #[error("Timed out fetching the URI")]
+    Timeout,
 
     #[error("Failed to create thumbnail: {0}")]
     Thumbnail(#[from] ThumbnailError),

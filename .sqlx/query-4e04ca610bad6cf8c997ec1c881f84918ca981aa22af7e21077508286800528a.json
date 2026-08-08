@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT height, header_hash\nFROM blocks\nWHERE header_hash IS NOT NULL AND is_peak = TRUE\nORDER BY height DESC\nLIMIT 1\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "height",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "header_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "4e04ca610bad6cf8c997ec1c881f84918ca981aa22af7e21077508286800528a"
+}

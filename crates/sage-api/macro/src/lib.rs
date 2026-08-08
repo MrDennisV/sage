@@ -16,6 +16,60 @@ pub fn impl_endpoints_tauri(input: TokenStream) -> TokenStream {
     generate(&input, true)
 }
 
+/// Like [`impl_endpoints`], but only expands the endpoints listed in the
+/// leading parenthesized group. Used by targets (such as sage-wasm) where
+/// only a subset of the Sage methods is available.
+///
+/// ```ignore
+/// impl_endpoints_portable! {
+///     (generate_mnemonic, get_keys)
+///     match command {
+///         (repeat endpoint_string => { ... })
+///         _ => ...,
+///     }
+/// }
+/// ```
+#[proc_macro]
+pub fn impl_endpoints_portable(input: TokenStream) -> TokenStream {
+    let all: IndexMap<String, bool> =
+        serde_json::from_str(include_str!("../../endpoints.json")).expect("Invalid endpoint file");
+
+    let mut input = input.into_iter();
+
+    let Some(TokenTree::Group(list)) = input.next() else {
+        panic!("expected a parenthesized list of endpoint names");
+    };
+
+    assert!(
+        list.delimiter() == Delimiter::Parenthesis,
+        "expected a parenthesized list of endpoint names"
+    );
+
+    let mut endpoints = IndexMap::new();
+
+    for token in list.stream() {
+        match token {
+            TokenTree::Ident(ident) => {
+                let name = ident.to_string();
+                let is_async = *all
+                    .get(&name)
+                    .unwrap_or_else(|| panic!("unknown endpoint `{name}`"));
+                endpoints.insert(name, is_async);
+            }
+            TokenTree::Punct(punct) if punct.as_char() == ',' => {}
+            token => panic!("unexpected token in endpoint list: {token}"),
+        }
+    }
+
+    let mut output = proc_macro2::TokenStream::new();
+
+    for token in input {
+        convert(token, &endpoints, None, &mut output);
+    }
+
+    output.into()
+}
+
 /// Attribute macro for `OpenAPI` metadata
 ///
 /// Usage:

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT key\nFROM p2_puzzles\nINNER JOIN p2_arbor ON p2_arbor.p2_puzzle_id = p2_puzzles.id\nWHERE p2_puzzles.hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "key",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "df8669a77ac15ab8abfd9f43a381f92508d46d858a8449b1de9bbd8493cbabc6"
+}

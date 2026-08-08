@@ -1,10 +1,12 @@
-use chia_wallet_sdk::prelude::*;
+use crate::prelude::*;
+
+use sage_database::SqlExecutor;
 
 use crate::WalletError;
 
 use super::Wallet;
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn combine(
         &self,
         selected_coin_ids: Vec<Bytes32>,

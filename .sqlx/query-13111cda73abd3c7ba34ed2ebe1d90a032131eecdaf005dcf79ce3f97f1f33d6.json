@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO coins\n    (hash, parent_coin_hash, puzzle_hash, amount, created_height, spent_height)\nVALUES\n    (?, ?, ?, ?, ?, ?)\nON CONFLICT(hash) DO UPDATE SET\n    created_height = excluded.created_height,\n    spent_height = excluded.spent_height\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "13111cda73abd3c7ba34ed2ebe1d90a032131eecdaf005dcf79ce3f97f1f33d6"
+}

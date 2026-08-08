@@ -1,13 +1,8 @@
 use std::slice;
 
-use chia_wallet_sdk::{
-    chia::{
-        bls::{master_to_wallet_hardened, master_to_wallet_unhardened, sign},
-        puzzle_types::{DeriveSynthetic, Proof},
-    },
-    driver::P2DelegatedConditionsLayer,
-    prelude::*,
-};
+use chia_bls::{master_to_wallet_hardened, master_to_wallet_unhardened, sign};
+use chia_puzzle_types::{DeriveSynthetic, Proof};
+use chia_sdk_driver::P2DelegatedConditionsLayer;
 use sage_api::{
     Amount,
     wallet_connect::{
@@ -17,8 +12,14 @@ use sage_api::{
         SignMessageWithPublicKey, SignMessageWithPublicKeyResponse, SpendableCoin,
     },
 };
-use sage_database::{AssetFilter, CoinFilterMode, CoinSortMode, DeserializePrimitive, P2Puzzle};
+use sage_database::{
+    AssetFilter, CoinFilterMode, CoinSortMode, DeserializePrimitive, P2Puzzle, SqlExecutor,
+};
+use sage_wallet::PeerApi;
+use sage_wallet::prelude::*;
+#[cfg(feature = "native")]
 use sage_wallet::{Status, SyncCommand, Transaction, insert_transaction, submit_to_peers};
+#[cfg(feature = "native")]
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -26,7 +27,7 @@ use crate::{
     parse_program, parse_public_key, parse_signature, parse_signature_message,
 };
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub async fn filter_unlocked_coins(
         &self,
         req: FilterUnlockedCoins,
@@ -244,6 +245,39 @@ impl Sage {
         })
     }
 
+    /// Broadcasts a bundle a site built and signed itself, and records it as
+    /// pending so the wallet shows it until a sync confirms or fails it. This
+    /// is the CHIP-0002 `sendTransaction` endpoint, and the only way a dApp can
+    /// put a transaction it assembled on chain.
+    pub async fn send_transaction_with_peer(
+        &self,
+        peer: &impl PeerApi,
+        req: SendTransactionImmediately,
+    ) -> Result<SendTransactionImmediatelyResponse> {
+        // Fail before broadcasting anything if there is no wallet to record
+        // the transaction against.
+        self.wallet()?;
+
+        let spend_bundle = rust_bundle(req.spend_bundle)?;
+
+        match self.submit_with_peer(peer, spend_bundle).await {
+            Ok(()) => Ok(SendTransactionImmediatelyResponse {
+                status: 1,
+                error: None,
+            }),
+            // A rejection is the node's answer, not a failure of the request,
+            // so it is reported the way the caller expects to read it.
+            Err(Error::TransactionRejected { status, error, .. }) => {
+                Ok(SendTransactionImmediatelyResponse { status, error })
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+// Submitting to every connected peer at once needs the peer pool.
+#[cfg(feature = "native")]
+impl Sage {
     pub async fn send_transaction_immediately(
         &self,
         req: SendTransactionImmediately,

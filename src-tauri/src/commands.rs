@@ -4,16 +4,13 @@ use crate::{
     app_state::{self, AppState, Initialized, RpcTask},
     error::Result,
 };
-use chia_wallet_sdk::utils::Address;
-use reqwest::StatusCode;
-use sage::Error;
 use sage_api::{wallet_connect::*, *};
 use sage_api_macro::impl_endpoints_tauri;
 #[cfg(not(mobile))]
 use sage_apps::ensure_initial_sandbox_run;
 use sage_config::{NetworkConfig, Wallet, WalletDefaults};
 use sage_rpc::start_rpc;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use specta::{Type, specta};
 use tauri::{AppHandle, State, command};
 use tokio::time::sleep;
@@ -77,36 +74,25 @@ impl_endpoints_tauri! {
 #[command]
 #[specta]
 pub async fn validate_address(state: State<'_, AppState>, address: String) -> Result<bool> {
-    let state = state.lock().await;
-    let Some(address) = Address::decode(&address).ok() else {
-        return Ok(false);
-    };
-    Ok(address.prefix == state.network().prefix())
+    Ok(state.lock().await.is_valid_address(&address))
 }
 
 #[command]
 #[specta]
 pub async fn network_config(state: State<'_, AppState>) -> Result<NetworkConfig> {
-    Ok(state.lock().await.config.network.clone())
+    Ok(state.lock().await.network_config())
 }
 
 #[command]
 #[specta]
 pub async fn wallet_config(state: State<'_, AppState>, fingerprint: u32) -> Result<Option<Wallet>> {
-    Ok(state
-        .lock()
-        .await
-        .wallet_config
-        .wallets
-        .iter()
-        .find(|wallet| wallet.fingerprint == fingerprint)
-        .cloned())
+    Ok(state.lock().await.wallet_config_of(fingerprint))
 }
 
 #[command]
 #[specta]
 pub async fn default_wallet_config(state: State<'_, AppState>) -> Result<WalletDefaults> {
-    Ok(state.lock().await.wallet_config.defaults)
+    Ok(state.lock().await.wallet_defaults())
 }
 
 #[command]
@@ -178,18 +164,7 @@ pub async fn switch_wallet(app_handle: AppHandle, state: State<'_, AppState>) ->
 #[command]
 #[specta]
 pub async fn move_key(state: State<'_, AppState>, fingerprint: u32, index: u32) -> Result<()> {
-    let mut state = state.lock().await;
-
-    let old_index = state
-        .wallet_config
-        .wallets
-        .iter()
-        .position(|w| w.fingerprint == fingerprint)
-        .ok_or(Error::UnknownFingerprint)?;
-
-    let wallet = state.wallet_config.wallets.remove(old_index);
-    state.wallet_config.wallets.insert(index as usize, wallet);
-    state.save_config()?;
+    state.lock().await.move_wallet(fingerprint, index)?;
 
     Ok(())
 }
@@ -197,35 +172,7 @@ pub async fn move_key(state: State<'_, AppState>, fingerprint: u32, index: u32) 
 #[command]
 #[specta]
 pub async fn download_cni_offercode(code: String) -> Result<String> {
-    #[derive(Serialize)]
-    struct Request {
-        code: String,
-    }
-
-    #[derive(Deserialize)]
-    struct Response {
-        offer: String,
-    }
-
-    let response = reqwest::Client::new()
-        .post("https://offercodes.chia.net/download_offer")
-        .json(&Request { code: code.clone() })
-        .send()
-        .await?;
-
-    if response.status() != StatusCode::OK {
-        return Err(crate::error::Error {
-            kind: ErrorKind::Nfc,
-            reason: format!(
-                "Invalid offer code {code}: Server responded with code {}",
-                response.status()
-            ),
-        });
-    }
-
-    let response = response.json::<Response>().await?.offer;
-
-    Ok(response)
+    Ok(sage::download_cni_offercode(code).await?)
 }
 
 #[derive(Serialize, Type)]

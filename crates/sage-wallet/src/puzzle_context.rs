@@ -1,18 +1,15 @@
 use std::time::Duration;
 
-use chia_wallet_sdk::{
-    chia::puzzle_types::{
-        nft::{NftOwnershipLayerSolution, NftStateLayerSolution},
-        singleton::{LauncherSolution, SingletonSolution},
-    },
-    driver::SingletonLayer,
-    prelude::*,
-    puzzles::SINGLETON_LAUNCHER_HASH,
+use crate::prelude::*;
+use chia_puzzle_types::{
+    nft::{NftOwnershipLayerSolution, NftStateLayerSolution},
+    singleton::{LauncherSolution, SingletonSolution},
 };
-use tokio::time::sleep;
+use chia_sdk_driver::SingletonLayer;
 use tracing::warn;
 
-use crate::{ChildKind, WalletError, WalletPeer};
+use crate::portable::sleep;
+use crate::{ChildKind, PeerApi, WalletError};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Default, Clone)]
@@ -27,7 +24,7 @@ pub enum PuzzleContext {
 
 impl PuzzleContext {
     pub async fn fetch(
-        peer: &WalletPeer,
+        peer: &impl PeerApi,
         genesis_challenge: Bytes32,
         kind: &ChildKind,
     ) -> Result<Self, WalletError> {
@@ -51,7 +48,7 @@ impl PuzzleContext {
 }
 
 pub async fn fetch_minter_hash(
-    peer: &WalletPeer,
+    peer: &impl PeerApi,
     genesis_challenge: Bytes32,
     launcher_id: Bytes32,
 ) -> Result<Option<Bytes32>, WalletError> {
@@ -132,7 +129,7 @@ pub struct OptionContext {
 }
 
 pub async fn fetch_option(
-    peer: &WalletPeer,
+    peer: &impl PeerApi,
     genesis_challenge: Bytes32,
     info: &OptionInfo,
 ) -> Result<Option<OptionContext>, WalletError> {

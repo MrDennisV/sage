@@ -1,10 +1,7 @@
-use chia_wallet_sdk::{
-    chia::puzzle_types::nft::NftMetadata,
-    driver::{MetadataUpdate, TransferNftById},
-    prelude::*,
-    puzzles::NFT_METADATA_UPDATER_DEFAULT_HASH,
-};
-use sage_database::{SerializePrimitive, SerializedNft};
+use crate::prelude::*;
+use chia_puzzle_types::nft::NftMetadata;
+use chia_sdk_driver::{MetadataUpdate, TransferNftById};
+use sage_database::{SerializePrimitive, SerializedNft, SqlExecutor};
 
 use crate::{
     WalletError,
@@ -21,7 +18,7 @@ pub struct WalletNftMint {
     pub royalty_basis_points: u16,
 }
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn bulk_mint_nfts(
         &self,
         fee: u64,

@@ -1,18 +1,16 @@
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-
-use chia_wallet_sdk::prelude::*;
 use sage_api::OptionAssets;
 use sage_api::{Amount, NftRoyalty, OfferAsset, OfferSummary};
-use sage_database::OfferStatus;
-use sage_wallet::WalletError;
+use sage_database::{OfferStatus, SqlExecutor};
+use sage_wallet::portable::unix_timestamp;
+use sage_wallet::prelude::*;
+use sage_wallet::{PeerApi, WalletError};
 
 use crate::ConfirmationInfo;
 use crate::StatusCoinType;
 use crate::utils::offer_status::offer_expiration;
 use crate::{Error, Result, Sage};
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub(crate) async fn summarize_offer(
         &self,
         spend_bundle: SpendBundle,
@@ -211,34 +209,29 @@ impl Sage {
 
         let mut offer_status = OfferStatus::Active;
 
-        if status.expiration_timestamp.is_some_and(|ts| {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                >= ts
-        }) {
+        if status
+            .expiration_timestamp
+            .is_some_and(|ts| unix_timestamp() >= ts)
+        {
             offer_status = OfferStatus::Expired;
         }
 
-        let peer_state = self.peer_state.lock().await;
-
         if let Some(expiration_height) = summary.expiration_height
-            && let Some((height, _)) = peer_state.peak()
+            && let Some(height) = self.peak_height().await
             && height >= expiration_height
         {
             offer_status = OfferStatus::Expired;
         }
 
         if !status.coins.is_empty()
-            && let Some(peer) = peer_state.acquire_peer()
+            && let Some(peer) = self.acquire_peer().await
         {
-            let coin_states = peer
-                .fetch_coins(
-                    status.coins.keys().copied().collect(),
-                    wallet.genesis_challenge,
-                )
-                .await?;
+            let coin_states = PeerApi::fetch_coins(
+                &peer,
+                status.coins.keys().copied().collect(),
+                wallet.genesis_challenge,
+            )
+            .await?;
 
             for coin_state in coin_states {
                 let Some(coin_type) = status.coins.get(&coin_state.coin.coin_id()) else {

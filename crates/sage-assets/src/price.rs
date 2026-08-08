@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 use reqwest::Client;
@@ -32,14 +33,18 @@ impl XchUsdPrice {
 }
 
 fn price_client() -> Result<Client, UriError> {
-    Ok(Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(format!(
-            "{}/{}",
-            env!("CARGO_PKG_NAME"),
-            env!("CARGO_PKG_VERSION")
-        ))
-        .build()?)
+    let builder = Client::builder();
+
+    // Neither option exists in reqwest's wasm backend: the browser supplies the
+    // user agent and enforces its own request timeouts.
+    #[cfg(not(target_arch = "wasm32"))]
+    let builder = builder.timeout(Duration::from_secs(10)).user_agent(format!(
+        "{}/{}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    ));
+
+    Ok(builder.build()?)
 }
 
 #[derive(Debug, Deserialize)]

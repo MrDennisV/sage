@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT collections.hash, uuid, collections.minter_hash, collections.name, collections.icon_url, \ncollections.banner_url, collections.description, collections.is_visible, COUNT(*) OVER() as total_count\nFROM collections\nWHERE 1=1\nAND EXISTS (SELECT 1 FROM owned_nfts WHERE owned_nfts.collection_id = collections.id)\nAND (? OR is_visible = 1)\nORDER BY CASE WHEN collections.id = 0 THEN 1 ELSE 0 END, name ASC\nLIMIT ?\nOFFSET ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "minter_hash",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "icon_url",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "banner_url",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_visible",
+        "ordinal": 7,
+        "type_info": "Bool"
+      },
+      {
+        "name": "total_count",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ec3709235f94190a136ad736da6c791fb132fd39656801da3e508d80faf49be2"
+}

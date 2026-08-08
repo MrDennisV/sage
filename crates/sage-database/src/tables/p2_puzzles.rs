@@ -1,7 +1,12 @@
-use chia_wallet_sdk::{prelude::*, types::puzzles::P2DelegatedConditionsArgs};
-use sqlx::{SqliteExecutor, query};
+use chia_bls::PublicKey;
+use chia_protocol::Bytes32;
+use chia_sdk_driver::{ClawbackV2, OptionType, OptionUnderlying};
+use chia_sdk_types::{Mod, puzzles::P2DelegatedConditionsArgs};
+use clvm_utils::ToTreeHash;
 
-use crate::{Convert, Database, DatabaseError, DatabaseTx, Result};
+use crate::{
+    Convert, Database, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum P2PuzzleKind {
@@ -51,43 +56,56 @@ pub struct DerivationRow {
     pub synthetic_key: PublicKey,
 }
 
-impl Database {
-    pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
-        public_key(&self.pool, p2_puzzle_hash).await
+impl<E: SqlExecutor> Database<E> {
+    pub async fn derivations(
+        &self,
+        is_hardened: bool,
+        limit: u32,
+        offset: u32,
+    ) -> Result<(Vec<DerivationRow>, u32)> {
+        derivations(&self.executor, is_hardened, limit, offset).await
+    }
+
+    pub async fn max_derivation_index(&self, is_hardened: bool) -> Result<Option<u32>> {
+        max_derivation_index(&self.executor, is_hardened).await
     }
 
     pub async fn custody_p2_puzzle_hashes(&self) -> Result<Vec<Bytes32>> {
-        custody_p2_puzzle_hashes(&self.pool).await
-    }
-
-    pub async fn is_custody_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_custody_p2_puzzle_hash(&self.pool, puzzle_hash).await
+        custody_p2_puzzle_hashes(&self.executor).await
     }
 
     pub async fn is_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_p2_puzzle_hash(&self.pool, puzzle_hash).await
+        is_p2_puzzle_hash(&self.executor, puzzle_hash).await
+    }
+
+    pub async fn public_key(&self, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
+        public_key(&self.executor, p2_puzzle_hash).await
+    }
+
+    pub async fn is_custody_p2_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<bool> {
+        is_custody_p2_puzzle_hash(&self.executor, puzzle_hash).await
     }
 
     pub async fn p2_puzzle(&self, puzzle_hash: Bytes32) -> Result<P2Puzzle> {
-        match p2_puzzle_kind(&self.pool, puzzle_hash).await? {
+        match p2_puzzle_kind(&self.executor, puzzle_hash).await? {
             P2PuzzleKind::PublicKey => {
-                let Some(key) = public_key(&self.pool, puzzle_hash).await? else {
+                let Some(key) = public_key(&self.executor, puzzle_hash).await? else {
                     return Err(DatabaseError::PublicKeyNotFound);
                 };
 
                 Ok(P2Puzzle::PublicKey(key))
             }
-            P2PuzzleKind::Clawback => {
-                Ok(P2Puzzle::Clawback(clawback(&self.pool, puzzle_hash).await?))
-            }
+            P2PuzzleKind::Clawback => Ok(P2Puzzle::Clawback(
+                clawback(&self.executor, puzzle_hash).await?,
+            )),
             P2PuzzleKind::Option => {
-                let launcher_id = underlying_launcher_id(&self.pool, puzzle_hash).await?;
+                let launcher_id = underlying_launcher_id(&self.executor, puzzle_hash).await?;
                 let underlying = self
                     .option_underlying(launcher_id)
                     .await?
                     .ok_or(DatabaseError::OptionUnderlyingNotFound)?;
 
-                let Some(key) = public_key(&self.pool, underlying.creator_puzzle_hash).await?
+                let Some(key) = public_key(&self.executor, underlying.creator_puzzle_hash).await?
                 else {
                     return Err(DatabaseError::PublicKeyNotFound);
                 };
@@ -102,7 +120,7 @@ impl Database {
                 }))
             }
             P2PuzzleKind::Arbor => {
-                let Some(key) = arbor_key(&self.pool, puzzle_hash).await? else {
+                let Some(key) = arbor_key(&self.executor, puzzle_hash).await? else {
                     return Err(DatabaseError::PublicKeyNotFound);
                 };
 
@@ -112,46 +130,25 @@ impl Database {
     }
 
     pub async fn derivation(&self, public_key: PublicKey) -> Result<Option<Derivation>> {
-        derivation(&self.pool, public_key).await
-    }
-
-    pub async fn derivations(
-        &self,
-        is_hardened: bool,
-        limit: u32,
-        offset: u32,
-    ) -> Result<(Vec<DerivationRow>, u32)> {
-        derivations(&self.pool, is_hardened, limit, offset).await
-    }
-
-    pub async fn max_derivation_index(&self, is_hardened: bool) -> Result<Option<u32>> {
-        max_derivation_index(&self.pool, is_hardened).await
+        derivation(&self.executor, public_key).await
     }
 }
 
-impl DatabaseTx<'_> {
-    pub async fn custody_p2_puzzle_hash(
-        &mut self,
-        derivation_index: u32,
-        is_hardened: bool,
-    ) -> Result<Bytes32> {
-        custody_p2_puzzle_hash(&mut *self.tx, derivation_index, is_hardened).await
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
+    pub async fn insert_clawback_p2_puzzle(&mut self, clawback: ClawbackV2) -> Result<()> {
+        insert_clawback_p2_puzzle(&mut self.tx, clawback).await
     }
 
-    pub async fn is_custody_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_custody_p2_puzzle_hash(&mut *self.tx, puzzle_hash).await
+    pub async fn insert_option_p2_puzzle(&mut self, underlying: OptionUnderlying) -> Result<()> {
+        insert_option_p2_puzzle(&mut self.tx, underlying).await
+    }
+
+    pub async fn insert_arbor_p2_puzzle(&mut self, key: PublicKey) -> Result<()> {
+        insert_arbor_p2_puzzle(&mut self.tx, key).await
     }
 
     pub async fn is_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
-        is_p2_puzzle_hash(&mut *self.tx, puzzle_hash).await
-    }
-
-    pub async fn derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
-        derivation_index(&mut *self.tx, is_hardened).await
-    }
-
-    pub async fn unused_derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
-        unused_derivation_index(&mut *self.tx, is_hardened).await
+        is_p2_puzzle_hash(&mut self.tx, puzzle_hash).await
     }
 
     pub async fn insert_custody_p2_puzzle(
@@ -160,150 +157,128 @@ impl DatabaseTx<'_> {
         key: PublicKey,
         derivation: Derivation,
     ) -> Result<()> {
-        insert_custody_p2_puzzle(&mut *self.tx, p2_puzzle_hash, key, derivation).await
+        insert_custody_p2_puzzle(&mut self.tx, p2_puzzle_hash, key, derivation).await
     }
 
-    pub async fn insert_clawback_p2_puzzle(&mut self, clawback: ClawbackV2) -> Result<()> {
-        insert_clawback_p2_puzzle(&mut *self.tx, clawback).await
+    pub async fn custody_p2_puzzle_hash(
+        &mut self,
+        derivation_index: u32,
+        is_hardened: bool,
+    ) -> Result<Bytes32> {
+        custody_p2_puzzle_hash(&mut self.tx, derivation_index, is_hardened).await
     }
 
-    pub async fn insert_option_p2_puzzle(&mut self, underlying: OptionUnderlying) -> Result<()> {
-        insert_option_p2_puzzle(&mut *self.tx, underlying).await
+    pub async fn is_custody_p2_puzzle_hash(&mut self, puzzle_hash: Bytes32) -> Result<bool> {
+        is_custody_p2_puzzle_hash(&mut self.tx, puzzle_hash).await
     }
 
-    pub async fn insert_arbor_p2_puzzle(&mut self, key: PublicKey) -> Result<()> {
-        insert_arbor_p2_puzzle(&mut *self.tx, key).await
+    pub async fn unused_derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
+        unused_derivation_index(&mut self.tx, is_hardened).await
+    }
+
+    pub async fn derivation_index(&mut self, is_hardened: bool) -> Result<u32> {
+        derivation_index(&mut self.tx, is_hardened).await
     }
 }
 
-async fn custody_p2_puzzle_hashes(conn: impl SqliteExecutor<'_>) -> Result<Vec<Bytes32>> {
-    query!("SELECT hash FROM p2_puzzles WHERE kind IN (0, 3)")
-        .fetch_all(conn)
+async fn custody_p2_puzzle_hashes(mut conn: impl SqlAccess) -> Result<Vec<Bytes32>> {
+    conn.fetch_all(sql_file!("p2_puzzles/custody_p2_puzzle_hashes.sql"), vec![])
         .await?
-        .into_iter()
-        .map(|row| row.hash.convert())
+        .iter()
+        .map(|row| row.converted("hash"))
         .collect()
 }
 
 async fn custody_p2_puzzle_hash(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     derivation_index: u32,
     is_hardened: bool,
 ) -> Result<Bytes32> {
-    query!(
-        "
-        SELECT hash FROM p2_puzzles
-        INNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id
-        WHERE public_keys.derivation_index = ? AND public_keys.is_hardened = ?
-        ",
-        derivation_index,
-        is_hardened
+    conn.fetch_all(
+        sql_file!("p2_puzzles/custody_p2_puzzle_hash.sql"),
+        vec![derivation_index.into(), is_hardened.into()],
     )
-    .fetch_one(conn)
     .await?
-    .hash
-    .convert()
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .converted("hash")
 }
 
-async fn is_custody_p2_puzzle_hash(
-    conn: impl SqliteExecutor<'_>,
-    puzzle_hash: Bytes32,
-) -> Result<bool> {
-    let puzzle_hash = puzzle_hash.as_ref();
-
-    Ok(query!(
-        "SELECT COUNT(*) AS count FROM p2_puzzles WHERE hash = ? AND kind IN (0, 3)",
-        puzzle_hash
-    )
-    .fetch_one(conn)
-    .await?
-    .count
+async fn is_custody_p2_puzzle_hash(mut conn: impl SqlAccess, puzzle_hash: Bytes32) -> Result<bool> {
+    Ok(conn
+        .fetch_all(
+            sql_file!("p2_puzzles/is_custody_p2_puzzle_hash.sql"),
+            vec![puzzle_hash.into()],
+        )
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
         > 0)
 }
 
-async fn is_p2_puzzle_hash(conn: impl SqliteExecutor<'_>, puzzle_hash: Bytes32) -> Result<bool> {
-    let puzzle_hash = puzzle_hash.as_ref();
-
-    Ok(query!(
-        "SELECT COUNT(*) AS count FROM p2_puzzles WHERE hash = ?",
-        puzzle_hash
-    )
-    .fetch_one(conn)
-    .await?
-    .count
+async fn is_p2_puzzle_hash(mut conn: impl SqlAccess, puzzle_hash: Bytes32) -> Result<bool> {
+    Ok(conn
+        .fetch_all(
+            sql_file!("p2_puzzles/is_p2_puzzle_hash.sql"),
+            vec![puzzle_hash.into()],
+        )
+        .await?
+        .first()
+        .ok_or(DatabaseError::RowNotFound)?
+        .i64("count")?
         > 0)
 }
 
-async fn derivation_index(conn: impl SqliteExecutor<'_>, is_hardened: bool) -> Result<u32> {
-    query!(
-        "
-        SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index
-        FROM public_keys
-        WHERE is_hardened = ?
-        ",
-        is_hardened
+async fn derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result<u32> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/derivation_index.sql"),
+        vec![is_hardened.into()],
     )
-    .fetch_one(conn)
     .await?
-    .derivation_index
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .i64("derivation_index")?
     .convert()
 }
 
-async fn max_derivation_index(
-    conn: impl SqliteExecutor<'_>,
-    is_hardened: bool,
-) -> Result<Option<u32>> {
-    let row = query!(
-        "
-        SELECT MAX(derivation_index) AS derivation_index 
-        FROM public_keys 
-        WHERE is_hardened = ?
-        ",
-        is_hardened
+async fn max_derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result<Option<u32>> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/max_derivation_index.sql"),
+        vec![is_hardened.into()],
     )
-    .fetch_one(conn)
-    .await?;
-
-    row.derivation_index.convert()
+    .await?
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .opt_i64("derivation_index")?
+    .convert()
 }
 
 async fn derivations(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     is_hardened: bool,
     limit: u32,
     offset: u32,
 ) -> Result<(Vec<DerivationRow>, u32)> {
-    let rows = query!(
-        "
-        SELECT
-            p2_puzzles.hash AS p2_puzzle_hash,
-            public_keys.derivation_index,
-            public_keys.is_hardened,
-            public_keys.key AS synthetic_key,
-            COUNT(*) OVER() AS total
-        FROM p2_puzzles
-        INNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id
-        WHERE public_keys.is_hardened = ?
-        ORDER BY public_keys.derivation_index ASC
-        LIMIT ? OFFSET ?
-        ",
-        is_hardened,
-        limit,
-        offset
-    )
-    .fetch_all(conn)
-    .await?;
+    let rows = conn
+        .fetch_all(
+            sql_file!("p2_puzzles/derivations.sql"),
+            vec![is_hardened.into(), limit.into(), offset.into()],
+        )
+        .await?;
 
-    let total_count = rows.first().map_or(Ok(0), |row| row.total.try_into())?;
+    let total_count = rows
+        .first()
+        .map_or(Ok(0), |row| row.i64("total")?.convert())?;
 
     let derivations = rows
-        .into_iter()
+        .iter()
         .map(|row| {
             Ok(DerivationRow {
-                p2_puzzle_hash: row.p2_puzzle_hash.convert()?,
-                index: row.derivation_index.convert()?,
-                hardened: row.is_hardened,
-                synthetic_key: row.synthetic_key.convert()?,
+                p2_puzzle_hash: row.converted("p2_puzzle_hash")?,
+                index: row.i64("derivation_index")?.convert()?,
+                hardened: row.i64("is_hardened")? != 0,
+                synthetic_key: row.converted("synthetic_key")?,
             })
         })
         .collect::<Result<Vec<DerivationRow>>>()?;
@@ -311,147 +286,109 @@ async fn derivations(
     Ok((derivations, total_count))
 }
 
-async fn unused_derivation_index(conn: impl SqliteExecutor<'_>, is_hardened: bool) -> Result<u32> {
-    query!(
-        "
-        SELECT COALESCE(MAX(derivation_index) + 1, 0) AS derivation_index
-        FROM public_keys
-        INNER JOIN coins ON coins.p2_puzzle_id = public_keys.p2_puzzle_id
-        WHERE is_hardened = ?
-        ",
-        is_hardened
+async fn unused_derivation_index(mut conn: impl SqlAccess, is_hardened: bool) -> Result<u32> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/unused_derivation_index.sql"),
+        vec![is_hardened.into()],
     )
-    .fetch_one(conn)
     .await?
-    .derivation_index
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .i64("derivation_index")?
     .convert()
 }
 
 async fn insert_custody_p2_puzzle(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     p2_puzzle_hash: Bytes32,
     key: PublicKey,
     derivation: Derivation,
 ) -> Result<()> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-    let key = key.to_bytes();
-    let key = key.as_ref();
-
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 0);
-
-        INSERT OR IGNORE INTO public_keys (p2_puzzle_id, is_hardened, derivation_index, key)
-        VALUES ((SELECT id FROM p2_puzzles WHERE hash = ?), ?, ?, ?);
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        derivation.is_hardened,
-        derivation.derivation_index,
-        key,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_custody_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.into(),
+            p2_puzzle_hash.into(),
+            derivation.is_hardened.into(),
+            derivation.derivation_index.into(),
+            key.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-async fn insert_clawback_p2_puzzle(
-    conn: impl SqliteExecutor<'_>,
-    clawback: ClawbackV2,
-) -> Result<()> {
+async fn insert_clawback_p2_puzzle(mut conn: impl SqlAccess, clawback: ClawbackV2) -> Result<()> {
     let p2_puzzle_hash = clawback.tree_hash().to_vec();
-    let sender_puzzle_hash = clawback.sender_puzzle_hash.as_ref();
-    let receiver_puzzle_hash = clawback.receiver_puzzle_hash.as_ref();
     let seconds: i64 = clawback.seconds.try_into()?;
 
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 1);
-
-        INSERT OR IGNORE INTO clawbacks (p2_puzzle_id, sender_puzzle_hash, receiver_puzzle_hash, expiration_seconds)
-        VALUES ((SELECT id FROM p2_puzzles WHERE hash = ?), ?, ?, ?);
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        sender_puzzle_hash,
-        receiver_puzzle_hash,
-        seconds,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_clawback_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.clone().into(),
+            p2_puzzle_hash.into(),
+            clawback.sender_puzzle_hash.into(),
+            clawback.receiver_puzzle_hash.into(),
+            seconds.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
 async fn insert_option_p2_puzzle(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     underlying: OptionUnderlying,
 ) -> Result<()> {
-    let asset_hash = underlying.launcher_id.as_ref();
     let p2_puzzle_hash = underlying.tree_hash().to_vec();
-    let creator_puzzle_hash = underlying.creator_puzzle_hash.as_ref();
     let seconds: i64 = underlying.seconds.try_into()?;
 
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 2);
-
-        INSERT OR IGNORE INTO p2_options (p2_puzzle_id, option_asset_id, creator_puzzle_hash, expiration_seconds)
-        VALUES (
-            (SELECT id FROM p2_puzzles WHERE hash = ?),
-            (SELECT id FROM assets WHERE hash = ?),
-            ?,
-            ?
-        );
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        asset_hash,
-        creator_puzzle_hash,
-        seconds,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_option_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.clone().into(),
+            p2_puzzle_hash.into(),
+            underlying.launcher_id.into(),
+            underlying.creator_puzzle_hash.into(),
+            seconds.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-async fn insert_arbor_p2_puzzle(conn: impl SqliteExecutor<'_>, key: PublicKey) -> Result<()> {
+async fn insert_arbor_p2_puzzle(mut conn: impl SqlAccess, key: PublicKey) -> Result<()> {
     let p2_puzzle_hash = P2DelegatedConditionsArgs::new(key)
         .curry_tree_hash()
         .to_vec();
-    let key = key.to_bytes();
-    let key = key.as_ref();
 
-    query!(
-        "
-        INSERT OR IGNORE INTO p2_puzzles (hash, kind) VALUES (?, 3);
-
-        INSERT OR IGNORE INTO p2_arbor (p2_puzzle_id, key)
-        VALUES ((SELECT id FROM p2_puzzles WHERE hash = ?), ?);
-        ",
-        p2_puzzle_hash,
-        p2_puzzle_hash,
-        key,
+    conn.execute(
+        sql_file!("p2_puzzles/insert_arbor_p2_puzzle.sql"),
+        vec![
+            p2_puzzle_hash.clone().into(),
+            p2_puzzle_hash.into(),
+            key.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-async fn p2_puzzle_kind(
-    conn: impl SqliteExecutor<'_>,
-    p2_puzzle_hash: Bytes32,
-) -> Result<P2PuzzleKind> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!("SELECT kind FROM p2_puzzles WHERE hash = ?", p2_puzzle_hash)
-        .fetch_one(conn)
+async fn p2_puzzle_kind(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<P2PuzzleKind> {
+    let rows = conn
+        .fetch_all(
+            sql_file!("p2_puzzles/p2_puzzle_kind.sql"),
+            vec![p2_puzzle_hash.into()],
+        )
         .await?;
 
-    Ok(match row.kind {
+    let row = rows.first().ok_or(DatabaseError::RowNotFound)?;
+
+    Ok(match row.i64("kind")? {
         0 => P2PuzzleKind::PublicKey,
         1 => P2PuzzleKind::Clawback,
         2 => P2PuzzleKind::Option,
@@ -461,118 +398,74 @@ async fn p2_puzzle_kind(
 }
 
 async fn public_key(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     p2_puzzle_hash: Bytes32,
 ) -> Result<Option<PublicKey>> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!(
-        "
-        SELECT key
-        FROM p2_puzzles
-        INNER JOIN public_keys ON public_keys.p2_puzzle_id = p2_puzzles.id
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
+    conn.fetch_all(
+        sql_file!("p2_puzzles/public_key.sql"),
+        vec![p2_puzzle_hash.into()],
     )
-    .fetch_optional(conn)
-    .await?;
-
-    row.map(|row| row.key.convert()).transpose()
+    .await?
+    .first()
+    .map(|row| row.converted("key"))
+    .transpose()
 }
 
-async fn clawback(conn: impl SqliteExecutor<'_>, p2_puzzle_hash: Bytes32) -> Result<Clawback> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!(
-        "
-        SELECT key AS 'key?', sender_puzzle_hash, receiver_puzzle_hash, expiration_seconds
-        FROM p2_puzzles
-        INNER JOIN clawbacks ON clawbacks.p2_puzzle_id = p2_puzzles.id
-        LEFT JOIN public_keys ON public_keys.p2_puzzle_id IN (
-            SELECT id FROM p2_puzzles
-            WHERE (hash = sender_puzzle_hash AND unixepoch() < expiration_seconds)
-            OR (hash = receiver_puzzle_hash AND unixepoch() >= expiration_seconds)
-            LIMIT 1
+async fn clawback(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<Clawback> {
+    let rows = conn
+        .fetch_all(
+            sql_file!("p2_puzzles/clawback.sql"),
+            vec![p2_puzzle_hash.into()],
         )
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
-    )
-    .fetch_one(conn)
-    .await?;
+        .await?;
+
+    let row = rows.first().ok_or(DatabaseError::RowNotFound)?;
 
     Ok(Clawback {
-        public_key: row.key.convert()?,
-        sender_puzzle_hash: row.sender_puzzle_hash.convert()?,
-        receiver_puzzle_hash: row.receiver_puzzle_hash.convert()?,
-        seconds: row.expiration_seconds.convert()?,
+        public_key: row.opt_converted("key")?,
+        sender_puzzle_hash: row.converted("sender_puzzle_hash")?,
+        receiver_puzzle_hash: row.converted("receiver_puzzle_hash")?,
+        seconds: row.i64("expiration_seconds")?.convert()?,
     })
 }
 
 async fn underlying_launcher_id(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     p2_puzzle_hash: Bytes32,
 ) -> Result<Bytes32> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    query!(
-        "
-        SELECT assets.hash AS launcher_id
-        FROM p2_puzzles
-        INNER JOIN p2_options ON p2_options.p2_puzzle_id = p2_puzzles.id
-        INNER JOIN options ON options.asset_id = p2_options.option_asset_id
-        INNER JOIN assets ON assets.id = options.asset_id
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
+    conn.fetch_all(
+        sql_file!("p2_puzzles/underlying_launcher_id.sql"),
+        vec![p2_puzzle_hash.into()],
     )
-    .fetch_one(conn)
     .await?
-    .launcher_id
-    .convert()
+    .first()
+    .ok_or(DatabaseError::RowNotFound)?
+    .converted("launcher_id")
 }
 
-async fn arbor_key(
-    conn: impl SqliteExecutor<'_>,
-    p2_puzzle_hash: Bytes32,
-) -> Result<Option<PublicKey>> {
-    let p2_puzzle_hash = p2_puzzle_hash.as_ref();
-
-    let row = query!(
-        "
-        SELECT key
-        FROM p2_puzzles
-        INNER JOIN p2_arbor ON p2_arbor.p2_puzzle_id = p2_puzzles.id
-        WHERE p2_puzzles.hash = ?
-        ",
-        p2_puzzle_hash
+async fn arbor_key(mut conn: impl SqlAccess, p2_puzzle_hash: Bytes32) -> Result<Option<PublicKey>> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/arbor_key.sql"),
+        vec![p2_puzzle_hash.into()],
     )
-    .fetch_optional(conn)
-    .await?;
-
-    row.map(|row| row.key.convert()).transpose()
+    .await?
+    .first()
+    .map(|row| row.converted("key"))
+    .transpose()
 }
 
-async fn derivation(
-    conn: impl SqliteExecutor<'_>,
-    public_key: PublicKey,
-) -> Result<Option<Derivation>> {
-    let public_key = public_key.to_bytes();
-    let public_key = public_key.as_ref();
-
-    let Some(row) = query!(
-        "SELECT derivation_index, is_hardened FROM public_keys WHERE key = ?",
-        public_key
+async fn derivation(mut conn: impl SqlAccess, public_key: PublicKey) -> Result<Option<Derivation>> {
+    conn.fetch_all(
+        sql_file!("p2_puzzles/derivation.sql"),
+        vec![public_key.into()],
     )
-    .fetch_optional(conn)
     .await?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(Derivation {
-        derivation_index: row.derivation_index.convert()?,
-        is_hardened: row.is_hardened,
-    }))
+    .first()
+    .map(|row| {
+        Ok(Derivation {
+            derivation_index: row.i64("derivation_index")?.convert()?,
+            is_hardened: row.i64("is_hardened")? != 0,
+        })
+    })
+    .transpose()
 }

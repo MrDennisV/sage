@@ -1,23 +1,31 @@
-use std::time::{Duration, Instant};
-
-use chia_wallet_sdk::{chia::sha2::Sha256, prelude::*};
+use chia_protocol::Bytes32;
+use chia_sha2::Sha256;
 use futures_lite::StreamExt;
 use futures_util::stream::FuturesUnordered;
 use mime_sniffer::MimeTypeSniffer;
 use reqwest::{StatusCode, header::CONTENT_TYPE};
-use tokio::task::spawn_blocking;
 use tracing::debug;
 
 use crate::UriError;
 
-use super::{Thumbnail, thumbnail as make_thumbnail};
+use super::{Data, Thumbnail, ThumbnailError, thumbnail as make_thumbnail};
 
-#[derive(Debug, Clone)]
-pub struct Data {
-    pub blob: Vec<u8>,
-    pub mime_type: String,
-    pub hash: Bytes32,
-    pub thumbnail: Option<Thumbnail>,
+/// Sizes an image down. Decoding is enough work to stall whatever else is
+/// waiting, so where there is a thread pool it runs there; the browser has one
+/// thread and takes the pause.
+#[cfg(feature = "native")]
+async fn resize(blob: &[u8], mime_type: &str) -> Result<Option<Thumbnail>, ThumbnailError> {
+    let blob = blob.to_vec();
+    let mime_type = mime_type.to_string();
+
+    tokio::task::spawn_blocking(move || make_thumbnail(&blob, &mime_type))
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?
+}
+
+#[cfg(not(feature = "native"))]
+async fn resize(blob: &[u8], mime_type: &str) -> Result<Option<Thumbnail>, ThumbnailError> {
+    make_thumbnail(blob, mime_type)
 }
 
 pub async fn fetch_uri(uri: String, testnet: bool) -> Result<Data, UriError> {
@@ -57,29 +65,13 @@ pub async fn fetch_uri(uri: String, testnet: bool) -> Result<Data, UriError> {
     };
 
     if thumbnail.is_none() {
-        let start = Instant::now();
-
-        let blob_clone = blob.clone();
-        let mime_type_clone = mime_type.clone();
-
-        thumbnail =
-            match spawn_blocking(move || make_thumbnail(&blob_clone, &mime_type_clone)).await {
-                Ok(Ok(thumbnail)) => thumbnail,
-                Ok(Err(error)) => {
-                    debug!("No thumbnail created for {uri}: {error}");
-                    None
-                }
-                Err(error) => {
-                    debug!("Failed to create thumbnail for {uri}: {error}");
-                    None
-                }
-            };
-
-        let elapsed = start.elapsed();
-
-        if elapsed > Duration::from_millis(50) {
-            debug!("Thumbnail creation took {elapsed:?} for {uri}");
-        }
+        thumbnail = match resize(&blob, &mime_type).await {
+            Ok(thumbnail) => thumbnail,
+            Err(error) => {
+                debug!("No thumbnail created for {uri}: {error}");
+                None
+            }
+        };
     }
 
     Ok(Data {

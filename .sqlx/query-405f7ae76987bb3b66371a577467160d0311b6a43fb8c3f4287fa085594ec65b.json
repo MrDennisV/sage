@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n    (SELECT hash FROM coins WHERE coins.id = underlying_coin_id) AS underlying_coin_hash,\n    underlying_delegated_puzzle_hash\nFROM options\nINNER JOIN assets ON assets.id = options.asset_id\nWHERE hash = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "underlying_coin_hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "underlying_delegated_puzzle_hash",
+        "ordinal": 1,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "405f7ae76987bb3b66371a577467160d0311b6a43fb8c3f4287fa085594ec65b"
+}

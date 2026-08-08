@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE dids\nSET\n    metadata = ?,\n    recovery_list_hash = ?,\n    num_verifications_required = ?\nWHERE asset_id = (SELECT id FROM assets WHERE hash = ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "80e371a6c5d1fdbf7280fe51e79e3dcb05e83d61bb947c50e2496c79fdb0ce60"
+}

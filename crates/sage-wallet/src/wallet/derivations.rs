@@ -1,23 +1,19 @@
 use std::ops::Range;
 
-use chia_wallet_sdk::{
-    chia::{
-        bls::DerivableKey,
-        puzzle_types::{DeriveSynthetic, standard::StandardArgs},
-    },
-    prelude::*,
-};
-use sage_database::{DatabaseTx, Derivation};
+use crate::prelude::*;
+use chia_bls::DerivableKey;
+use chia_puzzle_types::{DeriveSynthetic, standard::StandardArgs};
+use sage_database::{DatabaseTx, Derivation, SqlExecutor};
 
 use crate::WalletError;
 
 use super::Wallet;
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     /// Inserts a range of unhardened derivations to the database.
     pub async fn insert_unhardened_derivations(
         &self,
-        tx: &mut DatabaseTx<'_>,
+        tx: &mut DatabaseTx<'_, E>,
         range: Range<u32>,
     ) -> Result<Vec<Bytes32>, WalletError> {
         let mut puzzle_hashes = Vec::new();

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) AS count FROM files\nWHERE EXISTS (\n    SELECT 1 FROM file_uris\n    WHERE file_uris.file_id = files.id\n    AND file_uris.last_checked_timestamp IS NOT NULL\n)\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cf5fda6f4c92ae5a08b3b56bd997a0f6242ed938bc31841ac6e5bd6c5e91682c"
+}

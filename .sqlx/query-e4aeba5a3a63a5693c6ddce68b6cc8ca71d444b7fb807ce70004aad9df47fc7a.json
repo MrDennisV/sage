@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE collections SET is_visible = ? WHERE hash = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e4aeba5a3a63a5693c6ddce68b6cc8ca71d444b7fb807ce70004aad9df47fc7a"
+}

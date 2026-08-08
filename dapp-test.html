@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sage dApp Test</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, system-ui, sans-serif;
+        background: #0a0a1a;
+        color: #e0e0e0;
+        padding: 20px;
+      }
+      h1 {
+        color: #00b865;
+        margin-bottom: 20px;
+      }
+      h2 {
+        color: #888;
+        margin: 20px 0 10px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 10px;
+      }
+      button {
+        padding: 12px 16px;
+        border: 1px solid #333;
+        border-radius: 8px;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        font-size: 14px;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.2s;
+      }
+      button:hover {
+        background: #2a2a4e;
+        border-color: #00b865;
+      }
+      button.success {
+        border-color: #00b865;
+        background: #0a2a1a;
+      }
+      button.error {
+        border-color: #ff4444;
+        background: #2a0a0a;
+      }
+      button .label {
+        font-weight: 600;
+        display: block;
+      }
+      button .desc {
+        font-size: 12px;
+        color: #888;
+        margin-top: 4px;
+      }
+      #log {
+        margin-top: 20px;
+        padding: 16px;
+        background: #111;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 13px;
+        max-height: 400px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .log-entry {
+        margin-bottom: 8px;
+        padding: 4px 0;
+        border-bottom: 1px solid #222;
+      }
+      .log-ok {
+        color: #00b865;
+      }
+      .log-err {
+        color: #ff4444;
+      }
+      .log-info {
+        color: #4488ff;
+      }
+      .status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        margin-left: 8px;
+      }
+      .status.connected {
+        background: #0a2a1a;
+        color: #00b865;
+      }
+      .status.disconnected {
+        background: #2a0a0a;
+        color: #ff4444;
+      }
+      #provider-status {
+        margin-bottom: 20px;
+        padding: 12px;
+        background: #1a1a2e;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sage dApp Test Suite</h1>
+
+    <div id="provider-status">Provider: <span id="prov">checking...</span></div>
+
+    <h2>Connection</h2>
+    <div class="grid">
+      <button onclick="call('connect')">
+        <span class="label">connect()</span>
+        <span class="desc">Ask the wallet for permission</span>
+      </button>
+      <button onclick="call('connect', { eager: true })">
+        <span class="label">connect({ eager: true })</span>
+        <span class="desc">Connect only if already approved</span>
+      </button>
+      <button onclick="call('disconnect')">
+        <span class="label">disconnect()</span>
+        <span class="desc">Revoke permission</span>
+      </button>
+    </div>
+
+    <h2>Read-Only (no popup)</h2>
+    <div class="grid">
+      <button onclick="call('chainId')">
+        <span class="label">chainId()</span>
+        <span class="desc">Get network ID</span>
+      </button>
+      <button onclick="call('getPublicKeys', { limit: 5 })">
+        <span class="label">getPublicKeys({ limit: 5 })</span>
+        <span class="desc">Get derived public keys</span>
+      </button>
+      <button onclick="call('getAddress')">
+        <span class="label">getAddress()</span>
+        <span class="desc">Get receive address</span>
+      </button>
+      <button onclick="call('getAssetBalance', { type: null, assetId: null })">
+        <span class="label">getAssetBalance(XCH)</span>
+        <span class="desc">Get XCH balance</span>
+      </button>
+      <button
+        onclick="call('getAssetCoins', { type: null, assetId: null, limit: 3 })"
+      >
+        <span class="label">getAssetCoins(XCH, 3)</span>
+        <span class="desc">Get 3 XCH coins</span>
+      </button>
+      <button onclick="call('getNfts', { limit: 5 })">
+        <span class="label">getNfts({ limit: 5 })</span>
+        <span class="desc">Get first 5 NFTs</span>
+      </button>
+      <button onclick="call('filterUnlockedCoins', { coinNames: ['0x00'] })">
+        <span class="label">filterUnlockedCoins()</span>
+        <span class="desc">Filter one made up coin</span>
+      </button>
+    </div>
+
+    <h2>Confirmation Required (opens the wallet)</h2>
+    <div class="grid">
+      <button onclick="testSignMessage()">
+        <span class="label">signMessage()</span>
+        <span class="desc">Sign "Hello Sage" with the first key</span>
+      </button>
+      <button onclick="testSignByAddress()">
+        <span class="label">signMessageByAddress()</span>
+        <span class="desc">Sign with the receive address</span>
+      </button>
+      <button onclick="testTransferToSelf()">
+        <span class="label">transfer(1 mojo to self)</span>
+        <span class="desc">Goby's name for sending</span>
+      </button>
+      <button onclick="call('signCoinSpends', { coinSpends: [] })">
+        <span class="label">signCoinSpends()</span>
+        <span class="desc">Sign an empty spend bundle</span>
+      </button>
+      <button
+        onclick="
+          call('createOffer', {
+            offerAssets: [{ assetId: '', amount: 1 }],
+            requestAssets: [{ assetId: '', amount: 1 }],
+            fee: 0,
+          })
+        "
+      >
+        <span class="label">createOffer()</span>
+        <span class="desc">Create a test offer</span>
+      </button>
+      <button onclick="call('takeOffer', { offer: 'offer1test', fee: 0 })">
+        <span class="label">takeOffer()</span>
+        <span class="desc">Take an offer (test data)</span>
+      </button>
+      <button onclick="call('cancelOffer', { id: 'test', fee: 0 })">
+        <span class="label">cancelOffer()</span>
+        <span class="desc">Cancel an offer (test data)</span>
+      </button>
+    </div>
+
+    <h2>Goby Wallet Methods</h2>
+    <div class="grid">
+      <button
+        onclick="
+          call('sendTransaction', {
+            spendBundle: {
+              coin_spends: [],
+              aggregated_signature: '0x' + 'c'.repeat(192),
+            },
+          })
+        "
+      >
+        <span class="label">sendTransaction()</span>
+        <span class="desc">Broadcast an empty bundle</span>
+      </button>
+      <button
+        onclick="
+          call('walletWatchAsset', {
+            type: 'CAT',
+            options: { assetId: '0x00', symbol: 'TEST' },
+          })
+        "
+      >
+        <span class="label">walletWatchAsset()</span>
+        <span class="desc">Watch a CAT (errors if unknown)</span>
+      </button>
+      <button onclick="call('walletSwitchChain', { chainId: 'testnet11' })">
+        <span class="label">walletSwitchChain(testnet11)</span>
+        <span class="desc">Switch the wallet's network</span>
+      </button>
+      <button onclick="call('walletSwitchChain', { chainId: 'mainnet' })">
+        <span class="label">walletSwitchChain(mainnet)</span>
+        <span class="desc">Switch back to mainnet</span>
+      </button>
+    </div>
+
+    <h2>Log</h2>
+    <div id="log"></div>
+
+    <script>
+      let provider = window.chia;
+      const logEl = document.getElementById('log');
+      const provEl = document.getElementById('prov');
+
+      // Everything the test suite has seen, so an automated run can assert on it.
+      window.sageTestEvents = [];
+
+      function checkProvider() {
+        provider = window.chia;
+        if (provider) {
+          provEl.innerHTML = `<span class="status connected">window.chia</span> isSage=${provider.isSage} request=${typeof provider.request}`;
+          listen();
+        } else {
+          provEl.innerHTML =
+            '<span class="status disconnected">Waiting for provider...</span>';
+        }
+      }
+
+      let listening = false;
+      function listen() {
+        if (listening || !provider?.on) return;
+        listening = true;
+        for (const name of ['accountChanged', 'chainChanged']) {
+          provider.on(name, () => {
+            window.sageTestEvents.push(name);
+            log('info', name, 'provider event');
+          });
+        }
+      }
+
+      checkProvider();
+      window.addEventListener('chia#initialized', checkProvider);
+      setTimeout(checkProvider, 500);
+      setTimeout(checkProvider, 1500);
+
+      function log(type, method, data) {
+        const cls =
+          type === 'ok' ? 'log-ok' : type === 'err' ? 'log-err' : 'log-info';
+        const prefix = type === 'ok' ? 'ok' : type === 'err' ? 'error' : 'info';
+        const str =
+          typeof data === 'object'
+            ? JSON.stringify(data, null, 2)
+            : String(data);
+        logEl.innerHTML =
+          `<div class="log-entry ${cls}">[${prefix}] <b>${method}</b>\n${str}</div>` +
+          logEl.innerHTML;
+      }
+
+      // Every button goes through request(), which is what real dApps use.
+      async function call(method, params) {
+        const btn = typeof event !== 'undefined' ? event.currentTarget : null;
+        try {
+          log('info', method, 'calling...');
+          const result = await window.chia.request({ method, params });
+          log('ok', method, result === undefined ? 'undefined' : result);
+          if (btn) btn.className = 'success';
+          return result;
+        } catch (e) {
+          log('err', method, e.message);
+          if (btn) btn.className = 'error';
+          throw e;
+        }
+      }
+
+      async function testSignMessage() {
+        const keys = await window.chia.request({
+          method: 'getPublicKeys',
+          params: { limit: 1 },
+        });
+        if (!keys.length) {
+          log('err', 'signMessage', 'No keys');
+          return;
+        }
+        return call('signMessage', {
+          message: 'Hello Sage!',
+          publicKey: keys[0],
+        });
+      }
+
+      async function testSignByAddress() {
+        const { address } = await window.chia.request({ method: 'getAddress' });
+        return call('signMessageByAddress', {
+          address,
+          message: 'Hello from address!',
+        });
+      }
+
+      async function testTransferToSelf() {
+        const { address } = await window.chia.request({ method: 'getAddress' });
+        return call('transfer', { to: address, amount: 1, fee: 0 });
+      }
+    </script>
+  </body>
+</html>

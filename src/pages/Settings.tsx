@@ -59,12 +59,19 @@ import { getVersion } from '@tauri-apps/api/app';
 import { platform } from '@tauri-apps/plugin-os';
 import {
   DownloadIcon,
+  Globe,
   LoaderCircleIcon,
   TrashIcon,
   WalletIcon,
 } from 'lucide-react';
 import prettyBytes from 'pretty-bytes';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -149,12 +156,14 @@ export default function Settings() {
                     <Trans>Network</Trans>
                   </TabsTrigger>
 
-                  <TabsTrigger
-                    value='advanced'
-                    className='flex-1 md:flex-none rounded-md px-3 py-1 text-sm font-medium'
-                  >
-                    <Trans>Advanced</Trans>
-                  </TabsTrigger>
+                  {!__IS_EXTENSION__ && (
+                    <TabsTrigger
+                      value='advanced'
+                      className='flex-1 md:flex-none rounded-md px-3 py-1 text-sm font-medium'
+                    >
+                      <Trans>Advanced</Trans>
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
             </div>
@@ -163,6 +172,7 @@ export default function Settings() {
               <TabsContent value='general'>
                 <div className='grid gap-4'>
                   <WalletConnectSettings />
+                  {__IS_EXTENSION__ && <ConnectedSitesSettings />}
                   <GlobalSettings />
                 </div>
               </TabsContent>
@@ -196,12 +206,14 @@ export default function Settings() {
                 <NetworkSettings />
               </TabsContent>
 
-              <TabsContent value='advanced'>
-                <div className='grid gap-4'>
-                  {!isMobile && <RpcSettings />}
-                  <LogViewer />
-                </div>
-              </TabsContent>
+              {!__IS_EXTENSION__ && (
+                <TabsContent value='advanced'>
+                  <div className='grid gap-4'>
+                    {!isMobile && <RpcSettings />}
+                    <LogViewer />
+                  </div>
+                </TabsContent>
+              )}
             </div>
           </Tabs>
         </div>
@@ -463,6 +475,33 @@ function TimeInput({ label, value, onChange }: TimeInputProps) {
   );
 }
 
+/**
+ * One connected thing and the button that ends it. WalletConnect sessions and
+ * websites are different underneath — a relay pairing against a stored grant —
+ * but they read the same, so the row is shared and the sections are not.
+ */
+function ConnectionRow({
+  icon,
+  name,
+  onDisconnect,
+}: {
+  icon: ReactNode;
+  name: string;
+  onDisconnect: () => void;
+}) {
+  return (
+    <div className='px-4 py-4 flex items-center justify-between gap-4'>
+      <div className='flex gap-3 items-center min-w-0'>
+        {icon}
+        <span className='font-medium truncate'>{name}</span>
+      </div>
+      <Button variant='destructive' size='icon' onClick={onDisconnect}>
+        <TrashIcon className='h-4 w-4' />
+      </Button>
+    </div>
+  );
+}
+
 function WalletConnectSettings() {
   const { pair, sessions, disconnect, connecting } = useWalletConnect();
   const [uri, setUri] = useState<string>('');
@@ -485,28 +524,18 @@ function WalletConnectSettings() {
     <SettingsSection title={t`WalletConnect`}>
       {sessions.length > 0 ? (
         sessions.map((session) => (
-          <div
+          <ConnectionRow
             key={session.topic}
-            className='px-4 py-4 flex items-center justify-between gap-4'
-          >
-            <div className='flex gap-3 items-center'>
+            icon={
               <img
                 src={session.peer?.metadata?.icons?.[0] ?? ''}
                 alt={session.peer?.metadata?.name ?? t`Unknown App`}
-                className='h-8 w-8 rounded-full'
+                className='h-8 w-8 rounded-full flex-shrink-0'
               />
-              <span className='font-medium'>
-                {session.peer?.metadata?.name ?? t`Unknown App`}
-              </span>
-            </div>
-            <Button
-              variant='destructive'
-              size='icon'
-              onClick={() => disconnect(session.topic)}
-            >
-              <TrashIcon className='h-4 w-4' />
-            </Button>
-          </div>
+            }
+            name={session.peer?.metadata?.name ?? t`Unknown App`}
+            onDisconnect={() => disconnect(session.topic)}
+          />
         ))
       ) : (
         <div className='p-3 text-sm text-muted-foreground'>
@@ -541,6 +570,71 @@ function WalletConnectSettings() {
   );
 }
 
+/**
+ * Websites that were granted access through `chip0002_connect`. Only the origin
+ * and when it was granted are recorded, so the row shows the host and nothing
+ * else; the grant carries no name or icon to display.
+ */
+function ConnectedSitesSettings() {
+  const [origins, setOrigins] = useState<string[]>([]);
+
+  useEffect(() => {
+    chrome.runtime
+      .sendMessage({ type: 'DAPP_LIST' })
+      .then((response) => setOrigins(response?.data ?? []))
+      .catch((error) => console.error('Failed to list connected sites', error));
+  }, []);
+
+  const disconnect = (origin: string) => {
+    chrome.runtime
+      .sendMessage({ type: 'DAPP_REVOKE', origin })
+      .then(() => setOrigins((current) => current.filter((o) => o !== origin)))
+      .catch((error) => console.error('Failed to disconnect site', error));
+  };
+
+  return (
+    <SettingsSection title={t`Connected Sites`}>
+      {origins.length > 0 ? (
+        origins.map((origin) => (
+          <ConnectionRow
+            key={origin}
+            icon={
+              <Globe
+                className='h-8 w-8 p-1.5 rounded-full bg-muted flex-shrink-0'
+                aria-hidden='true'
+              />
+            }
+            name={hostOf(origin)}
+            onDisconnect={() => disconnect(origin)}
+          />
+        ))
+      ) : (
+        <div className='p-3 text-sm text-muted-foreground'>
+          <Trans>No connected sites</Trans>
+        </div>
+      )}
+    </SettingsSection>
+  );
+}
+
+/** Falls back to the whole origin when it is not a url we can shorten. */
+function hostOf(origin: string) {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
+/** Mirrors the fallback the wallet uses when a network has no API URL set. */
+function defaultApiUrl(network: Network) {
+  const networkId = network.network_id ?? network.name;
+
+  return networkId === 'mainnet'
+    ? 'https://api.coinset.org'
+    : `https://${networkId}.api.coinset.org`;
+}
+
 function NetworkSettings() {
   const { addError } = useErrors();
 
@@ -556,6 +650,7 @@ function NetworkSettings() {
     targetPeers === null || !isValidU32(targetPeers, 1);
 
   const [config, setConfig] = useState<NetworkConfig | null>(null);
+  const [apiUrls, setApiUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     commands.networkConfig().then(setConfig).catch(addError);
@@ -607,47 +702,87 @@ function NetworkSettings() {
         }
       />
 
-      <SettingItem
-        label={t`Discover Peers`}
-        description={t`Automatically discover and connect to peers`}
-        control={
-          <Switch
-            checked={discoverPeers ?? config?.discover_peers ?? true}
-            onCheckedChange={(checked) => {
-              commands
-                .setDiscoverPeers({ discover_peers: checked })
-                .catch(addError)
-                .finally(() => setDiscoverPeers(checked));
-            }}
-          />
-        }
-      />
-
-      <SettingItem
-        label={t`Target Peers`}
-        description={t`Number of peers to maintain connections with`}
-        control={
-          <Input
-            type='number'
-            className='w-[120px]'
-            value={targetPeersText ?? config?.target_peers ?? 500}
-            disabled={!(discoverPeers ?? config?.discover_peers)}
-            onChange={(event) => setTargetPeersText(event.target.value)}
-            onBlur={() => {
-              if (invalidTargetPeers) return;
-
-              if (targetPeers !== config?.target_peers) {
-                if (config) {
-                  setConfig({ ...config, target_peers: targetPeers });
+      {__IS_EXTENSION__ &&
+        networks.map((entry) => (
+          <SettingItem
+            key={entry.name}
+            label={t`${entry.name} API`}
+            description={t`Endpoint used to reach the ${entry.name} blockchain`}
+            control={
+              <Input
+                className='w-[260px]'
+                placeholder={defaultApiUrl(entry)}
+                value={apiUrls[entry.name] ?? entry.api_url ?? ''}
+                onChange={(event) =>
+                  setApiUrls((urls) => ({
+                    ...urls,
+                    [entry.name]: event.target.value,
+                  }))
                 }
-                commands
-                  .setTargetPeers({ target_peers: targetPeers })
-                  .catch(addError);
-              }
-            }}
+                onBlur={(event) => {
+                  const api_url = event.target.value.trim() || null;
+
+                  if (api_url === (entry.api_url ?? null)) return;
+
+                  commands
+                    .setNetworkApiUrl({ name: entry.name, api_url })
+                    .then(() =>
+                      commands
+                        .getNetworks({})
+                        .then((data) => setNetworks(data.networks)),
+                    )
+                    .catch(addError);
+                }}
+              />
+            }
           />
-        }
-      />
+        ))}
+
+      {!__IS_EXTENSION__ && (
+        <>
+          <SettingItem
+            label={t`Discover Peers`}
+            description={t`Automatically discover and connect to peers`}
+            control={
+              <Switch
+                checked={discoverPeers ?? config?.discover_peers ?? true}
+                onCheckedChange={(checked) => {
+                  commands
+                    .setDiscoverPeers({ discover_peers: checked })
+                    .catch(addError)
+                    .finally(() => setDiscoverPeers(checked));
+                }}
+              />
+            }
+          />
+
+          <SettingItem
+            label={t`Target Peers`}
+            description={t`Number of peers to maintain connections with`}
+            control={
+              <Input
+                type='number'
+                className='w-[120px]'
+                value={targetPeersText ?? config?.target_peers ?? 500}
+                disabled={!(discoverPeers ?? config?.discover_peers)}
+                onChange={(event) => setTargetPeersText(event.target.value)}
+                onBlur={() => {
+                  if (invalidTargetPeers) return;
+
+                  if (targetPeers !== config?.target_peers) {
+                    if (config) {
+                      setConfig({ ...config, target_peers: targetPeers });
+                    }
+                    commands
+                      .setTargetPeers({ target_peers: targetPeers })
+                      .catch(addError);
+                  }
+                }}
+              />
+            }
+          />
+        </>
+      )}
     </SettingsSection>
   );
 }
@@ -1108,7 +1243,9 @@ function WalletSettings({ fingerprint }: { fingerprint: number }) {
       .catch(addError);
 
     // Fetch database stats when component mounts
-    fetchDatabaseStats();
+    if (!__IS_EXTENSION__) {
+      fetchDatabaseStats();
+    }
   }, [addError, fingerprint, fetchDatabaseStats]);
 
   const addNetworkOverride = async () => {
@@ -1331,102 +1468,106 @@ function WalletSettings({ fingerprint }: { fingerprint: number }) {
         />
       </SettingsSection>
 
-      <SettingsSection title={t`Status`}>
-        <SettingItem
-          label={t`Database Stats`}
-          description={t`Current database statistics and health information`}
-          control={
-            <div className='flex gap-2'>
-              <Button
-                variant='outline'
-                size='sm'
-                disabled={performingMaintenance}
-                onClick={performMaintenance}
-              >
-                {performingMaintenance && (
-                  <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
-                )}
-                {performingMaintenance ? (
-                  <Trans>Optimizing...</Trans>
-                ) : (
-                  <Trans>Optimize</Trans>
-                )}
-              </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                disabled={loadingStats}
-                onClick={fetchDatabaseStats}
-              >
-                {loadingStats && (
-                  <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
-                )}
-                {loadingStats ? (
-                  <Trans>Loading...</Trans>
-                ) : (
-                  <Trans>Refresh</Trans>
-                )}
-              </Button>
-            </div>
-          }
-        >
-          {dbStats && (
-            <div className='mt-3 space-y-3'>
-              <div className='grid grid-cols-2 gap-4 text-sm'>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Database Size</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {prettyBytes(dbStats.database_size_bytes, { locale: true })}
+      {!__IS_EXTENSION__ && (
+        <SettingsSection title={t`Status`}>
+          <SettingItem
+            label={t`Database Stats`}
+            description={t`Current database statistics and health information`}
+            control={
+              <div className='flex gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  disabled={performingMaintenance}
+                  onClick={performMaintenance}
+                >
+                  {performingMaintenance && (
+                    <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
+                  )}
+                  {performingMaintenance ? (
+                    <Trans>Optimizing...</Trans>
+                  ) : (
+                    <Trans>Optimize</Trans>
+                  )}
+                </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  disabled={loadingStats}
+                  onClick={fetchDatabaseStats}
+                >
+                  {loadingStats && (
+                    <LoaderCircleIcon className='mr-2 h-4 w-4 animate-spin' />
+                  )}
+                  {loadingStats ? (
+                    <Trans>Loading...</Trans>
+                  ) : (
+                    <Trans>Refresh</Trans>
+                  )}
+                </Button>
+              </div>
+            }
+          >
+            {dbStats && (
+              <div className='mt-3 space-y-3'>
+                <div className='grid grid-cols-2 gap-4 text-sm'>
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Database Size</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {prettyBytes(dbStats.database_size_bytes, {
+                        locale: true,
+                      })}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Compactable Space</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {prettyBytes(dbStats.free_space_bytes, { locale: true })} (
-                    {dbStats.free_percentage.toFixed(1)}%)
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Compactable Space</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {prettyBytes(dbStats.free_space_bytes, { locale: true })}{' '}
+                      ({dbStats.free_percentage.toFixed(1)}%)
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Total Pages</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {dbStats.total_pages.toLocaleString()}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Total Pages</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {dbStats.total_pages.toLocaleString()}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Compactable Pages</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {dbStats.free_pages.toLocaleString()}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Compactable Pages</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {dbStats.free_pages.toLocaleString()}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>Page Size</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {prettyBytes(dbStats.page_size, { locale: true })}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>Page Size</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {prettyBytes(dbStats.page_size, { locale: true })}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <Label className='text-xs font-medium text-muted-foreground'>
-                    <Trans>WAL Pages</Trans>
-                  </Label>
-                  <div className='text-sm'>
-                    {dbStats.wal_pages.toLocaleString()}
+                  <div>
+                    <Label className='text-xs font-medium text-muted-foreground'>
+                      <Trans>WAL Pages</Trans>
+                    </Label>
+                    <div className='text-sm'>
+                      {dbStats.wal_pages.toLocaleString()}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </SettingItem>
-      </SettingsSection>
+            )}
+          </SettingItem>
+        </SettingsSection>
+      )}
 
       <Dialog open={deriveOpen} onOpenChange={setDeriveOpen}>
         <DialogContent>

@@ -1,10 +1,10 @@
-use crate::{Convert, Database, DatabaseTx, Result};
-use chia_wallet_sdk::prelude::*;
-use sqlx::SqliteExecutor;
+use chia_protocol::Bytes32;
 
-impl Database {
+use crate::{Convert, Database, DatabaseTx, Result, SqlAccess, SqlExecutor, sql_file};
+
+impl<E: SqlExecutor> Database<E> {
     pub async fn unsynced_blocks(&self, limit: u32) -> Result<Vec<u32>> {
-        unsynced_blocks(&self.pool, limit).await
+        unsynced_blocks(&self.executor, limit).await
     }
 
     pub async fn insert_block(
@@ -14,96 +14,79 @@ impl Database {
         timestamp: Option<i64>,
         is_peak: bool,
     ) -> Result<()> {
-        insert_block(&self.pool, height, header_hash, timestamp, is_peak).await
+        insert_block(&self.executor, height, header_hash, timestamp, is_peak).await
     }
 
     pub async fn latest_peak(&self) -> Result<Option<(u32, Bytes32)>> {
-        latest_peak(&self.pool).await
+        latest_peak(&self.executor).await
     }
 }
 
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_height(&mut self, height: u32) -> Result<()> {
-        insert_height(&mut *self.tx, height).await
+        insert_height(&mut self.tx, height).await
     }
 }
 
-async fn insert_height(conn: impl SqliteExecutor<'_>, height: u32) -> Result<()> {
-    sqlx::query!(
-        "INSERT OR IGNORE INTO blocks (height, is_peak) VALUES (?, FALSE)",
-        height
-    )
-    .execute(conn)
-    .await?;
+async fn insert_height(mut conn: impl SqlAccess, height: u32) -> Result<()> {
+    conn.execute(sql_file!("blocks/insert_height.sql"), vec![height.into()])
+        .await?;
 
     Ok(())
 }
 
-async fn unsynced_blocks(conn: impl SqliteExecutor<'_>, limit: u32) -> Result<Vec<u32>> {
-    let row = sqlx::query!(
-        "
-        SELECT created_height AS height FROM coins
-        INNER JOIN blocks ON blocks.height = coins.created_height
-        WHERE blocks.timestamp IS NULL
-        UNION
-        SELECT spent_height AS height FROM coins
-        INNER JOIN blocks ON blocks.height = coins.spent_height
-        WHERE blocks.timestamp IS NULL
-        ORDER BY height DESC
-        LIMIT ?
-        ",
-        limit
-    )
-    .fetch_all(conn)
-    .await?;
+async fn unsynced_blocks(mut conn: impl SqlAccess, limit: u32) -> Result<Vec<u32>> {
+    let rows = conn
+        .fetch_all(sql_file!("blocks/unsynced_blocks.sql"), vec![limit.into()])
+        .await?;
 
-    row.into_iter()
-        .filter_map(|r| r.height.convert().transpose())
-        .collect()
+    let mut heights = Vec::new();
+
+    for row in &rows {
+        if let Some(height) = row.opt_i64("height")? {
+            heights.push(height.convert()?);
+        }
+    }
+
+    Ok(heights)
 }
 
 async fn insert_block(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     height: u32,
     header_hash: Bytes32,
     unix_timestamp: Option<i64>,
     is_peak: bool,
 ) -> Result<()> {
-    let header_hash = header_hash.as_ref();
-    sqlx::query!(
-        "
-        INSERT INTO blocks (height, timestamp, header_hash, is_peak) VALUES (?, ?, ?, ?)
-        ON CONFLICT (height) DO UPDATE SET
-            timestamp = COALESCE(excluded.timestamp, timestamp),
-            header_hash = excluded.header_hash,
-            is_peak = (excluded.is_peak OR is_peak)
-        ",
-        height,
-        unix_timestamp,
-        header_hash,
-        is_peak
+    conn.execute(
+        sql_file!("blocks/insert_block.sql"),
+        vec![
+            height.into(),
+            unix_timestamp.into(),
+            header_hash.into(),
+            is_peak.into(),
+        ],
     )
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-async fn latest_peak(conn: impl SqliteExecutor<'_>) -> Result<Option<(u32, Bytes32)>> {
-    sqlx::query!(
-        "
-        SELECT height, header_hash
-        FROM blocks
-        WHERE header_hash IS NOT NULL AND is_peak = TRUE
-        ORDER BY height DESC
-        LIMIT 1
-        "
-    )
-    .fetch_optional(conn)
-    .await?
-    .and_then(|row| {
-        row.header_hash
-            .map(|hash| Ok((row.height.convert()?, hash.convert()?)))
-    })
-    .transpose()
+async fn latest_peak(mut conn: impl SqlAccess) -> Result<Option<(u32, Bytes32)>> {
+    let rows = conn
+        .fetch_all(sql_file!("blocks/latest_peak.sql"), vec![])
+        .await?;
+
+    let Some(row) = rows.first() else {
+        return Ok(None);
+    };
+
+    let Some(header_hash) = row.opt_blob("header_hash")? else {
+        return Ok(None);
+    };
+
+    Ok(Some((
+        row.i64("height")?.convert()?,
+        header_hash.convert()?,
+    )))
 }

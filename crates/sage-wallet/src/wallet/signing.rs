@@ -1,22 +1,20 @@
 use std::collections::HashMap;
 
-use chia_wallet_sdk::{
-    chia::{
-        bls::{
-            DerivableKey, master_to_wallet_hardened_intermediate,
-            master_to_wallet_unhardened_intermediate, sign,
-        },
-        puzzle_types::DeriveSynthetic,
-    },
-    prelude::*,
+use crate::prelude::*;
+use chia_bls::{
+    DerivableKey, master_to_wallet_hardened_intermediate, master_to_wallet_unhardened_intermediate,
+    sign,
 };
+use chia_puzzle_types::DeriveSynthetic;
 use itertools::Itertools;
+
+use sage_database::SqlExecutor;
 
 use crate::WalletError;
 
 use super::Wallet;
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn sign_transaction(
         &self,
         spend_bundle: SpendBundle,

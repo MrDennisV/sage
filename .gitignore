@@ -32,3 +32,7 @@ target
 !/builtin-apps/build/dist/
 /builtin-apps/build/dist/*
 !/builtin-apps/build/dist/.gitkeep
+
+# Chrome extension build output
+dist-extension
+src/extension/wasm

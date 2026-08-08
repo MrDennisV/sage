@@ -1,14 +1,11 @@
-use chia_wallet_sdk::{
-    driver::BURN_PUZZLE_HASH,
-    prelude::*,
-    puzzles::{SETTLEMENT_PAYMENT_HASH, SINGLETON_LAUNCHER_HASH},
-};
+use chia_sdk_driver::BURN_PUZZLE_HASH;
 use sage_api::AddressKind;
-use sage_database::{Asset, AssetKind};
+use sage_database::{Asset, AssetKind, SqlExecutor};
+use sage_wallet::prelude::*;
 
 use crate::{Result, Sage};
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub fn encode_asset(&self, asset: Asset) -> Result<sage_api::Asset> {
         Ok(sage_api::Asset {
             asset_id: encode_asset_id(asset.hash, asset.kind)?,

@@ -15,11 +15,11 @@ name = "sage_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
-sage = { workspace = true }
+sage = { workspace = true, features = ["native"] }
 sage-api = { workspace = true, features = ["tauri"] }
 sage-api-macro = { workspace = true }
 sage-config = { workspace = true }
-sage-wallet = { workspace = true }
+sage-wallet = { workspace = true, features = ["native"] }
 sage-rpc = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tauri = { workspace = true, features = [] }

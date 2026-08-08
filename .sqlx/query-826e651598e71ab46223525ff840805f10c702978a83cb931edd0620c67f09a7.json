@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT resized_images.data, mime_type\nFROM resized_images\nINNER JOIN files ON files.id = resized_images.file_id\nWHERE files.hash = ? AND kind = ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "data",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "mime_type",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "826e651598e71ab46223525ff840805f10c702978a83cb931edd0620c67f09a7"
+}

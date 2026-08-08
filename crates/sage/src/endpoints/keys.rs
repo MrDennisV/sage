@@ -1,110 +1,50 @@
-use std::{fs, str::FromStr};
+#[cfg(feature = "native")]
+use std::fs;
+use std::str::FromStr;
 
 use bip39::Mnemonic;
-use chia_wallet_sdk::{
-    chia::{
-        bls::{
-            DerivableKey, master_to_wallet_hardened_intermediate,
-            master_to_wallet_unhardened_intermediate,
-        },
-        puzzle_types::{DeriveSynthetic, standard::StandardArgs},
-    },
-    prelude::*,
+use chia_bls::{
+    DerivableKey, PublicKey, SecretKey, master_to_wallet_hardened_intermediate,
+    master_to_wallet_unhardened_intermediate,
 };
+use chia_puzzle_types::{DeriveSynthetic, standard::StandardArgs};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+#[cfg(feature = "native")]
 use sage_api::{
-    DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, GenerateMnemonic,
-    GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse, GetSecretKey,
-    GetSecretKeyResponse, ImportKey, ImportKeyResponse, KeyInfo, KeyKind, Login, LoginResponse,
-    Logout, LogoutResponse, RenameKey, RenameKeyResponse, Resync, ResyncResponse, SecretKeyInfo,
-    SetWalletEmoji, SetWalletEmojiResponse,
+    DeleteDatabase, DeleteDatabaseResponse, DeleteKey, DeleteKeyResponse, ImportKeyResponse, Login,
+    LoginResponse, Logout, LogoutResponse,
+};
+use sage_api::{
+    GenerateMnemonic, GenerateMnemonicResponse, GetKey, GetKeyResponse, GetKeys, GetKeysResponse,
+    GetSecretKey, GetSecretKeyResponse, ImportKey, KeyInfo, KeyKind, RenameKey, RenameKeyResponse,
+    Resync, ResyncResponse, SecretKeyInfo, SetWalletEmoji, SetWalletEmojiResponse,
 };
 use sage_config::Wallet;
-use sage_database::{Database, Derivation};
+use sage_database::{Database, Derivation, ResyncRecords, SqlExecutor};
+#[cfg(feature = "native")]
 use sqlx::query;
 
 use crate::{Error, Result, Sage};
 
-impl Sage {
-    pub async fn login(&mut self, req: Login) -> Result<LoginResponse> {
-        self.config.global.fingerprint = Some(req.fingerprint);
-        self.save_config()?;
-        self.switch_wallet().await?;
-        Ok(LoginResponse {})
-    }
+impl<E: SqlExecutor> Sage<E> {
+    /// Forgets a key and its settings. The wallet's own data lives outside the
+    /// config, so callers remove that separately.
+    pub fn remove_key(&mut self, fingerprint: u32) -> Result<()> {
+        self.keychain.remove(fingerprint);
 
-    pub async fn logout(&mut self, _req: Logout) -> Result<LogoutResponse> {
-        self.config.global.fingerprint = None;
-        self.save_config()?;
-        self.switch_wallet().await?;
-        Ok(LogoutResponse {})
-    }
+        self.wallet_config
+            .wallets
+            .retain(|wallet| wallet.fingerprint != fingerprint);
 
-    pub async fn resync(&mut self, req: Resync) -> Result<ResyncResponse> {
-        let login = self.config.global.fingerprint == Some(req.fingerprint);
-
-        if login {
+        if self.config.global.fingerprint == Some(fingerprint) {
             self.config.global.fingerprint = None;
-            self.switch_wallet().await?;
         }
 
-        let pool = self.connect_to_database(req.fingerprint).await?;
+        self.save_keychain()?;
+        self.save_config()?;
 
-        query!(
-            "
-            DELETE FROM mempool_items;
-            UPDATE blocks SET is_peak = FALSE WHERE is_peak = TRUE;
-            "
-        )
-        .execute(&pool)
-        .await?;
-
-        if req.delete_coins {
-            query!("DELETE FROM coins").execute(&pool).await?;
-        }
-
-        if req.delete_assets {
-            query!(
-                "
-                DELETE FROM assets WHERE id != 0;
-                DELETE FROM collections WHERE id != 0;
-                "
-            )
-            .execute(&pool)
-            .await?;
-        }
-
-        if req.delete_files {
-            query!("DELETE FROM files").execute(&pool).await?;
-        }
-
-        if req.delete_offers {
-            query!("DELETE FROM offers").execute(&pool).await?;
-        }
-
-        if req.delete_addresses {
-            query!("DELETE FROM p2_puzzles").execute(&pool).await?;
-        }
-
-        if req.delete_blocks {
-            query!("DELETE FROM blocks").execute(&pool).await?;
-        }
-
-        // reclaim disk space after all those deletes
-        query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&pool)
-            .await?;
-        query("VACUUM").execute(&pool).await?;
-        query("ANALYZE").execute(&pool).await?;
-
-        if login {
-            self.config.global.fingerprint = Some(req.fingerprint);
-            self.save_config()?;
-            self.switch_wallet().await?;
-        }
-
-        Ok(ResyncResponse {})
+        Ok(())
     }
 
     pub fn generate_mnemonic(&self, req: GenerateMnemonic) -> Result<GenerateMnemonicResponse> {
@@ -119,174 +59,6 @@ impl Sage {
         Ok(GenerateMnemonicResponse {
             mnemonic: mnemonic.to_string(),
         })
-    }
-
-    pub async fn import_key(&mut self, req: ImportKey) -> Result<ImportKeyResponse> {
-        let mut key_hex = req.key.as_str();
-
-        if key_hex.starts_with("0x") || key_hex.starts_with("0X") {
-            key_hex = &key_hex[2..];
-        }
-
-        let (fingerprint, master_sk, master_pk) = if let Ok(bytes) = hex::decode(key_hex) {
-            if let Ok(master_pk) = bytes.clone().try_into() {
-                let master_pk = PublicKey::from_bytes(&master_pk)?;
-                let fingerprint = self.keychain.add_public_key(&master_pk)?;
-                (fingerprint, None, master_pk)
-            } else if let Ok(master_sk) = bytes.try_into() {
-                let master_sk = SecretKey::from_bytes(&master_sk)?;
-                let master_pk = master_sk.public_key();
-
-                let fingerprint = if req.save_secrets {
-                    self.keychain.add_secret_key(&master_sk, b"")?
-                } else {
-                    self.keychain.add_public_key(&master_pk)?
-                };
-
-                (fingerprint, Some(master_sk), master_pk)
-            } else {
-                return Err(Error::InvalidKey);
-            }
-        } else {
-            let words: Vec<&str> = req.key.split_whitespace().collect();
-            let word_count = words.len();
-
-            if word_count != 12 && word_count != 24 {
-                return Err(Error::InvalidMnemonic(format!(
-                    "Expected 12 or 24 words, but got {word_count}."
-                )));
-            }
-
-            let mnemonic = Mnemonic::from_str(&req.key).map_err(|e| match e {
-                bip39::Error::BadWordCount(count) => {
-                    Error::InvalidMnemonic(format!("Expected 12 or 24 words, but got {count}."))
-                }
-                bip39::Error::UnknownWord(idx) => Error::InvalidMnemonic(format!(
-                    "Word #{} ({}) is not a valid BIP39 word.",
-                    idx + 1,
-                    words.get(idx).copied().unwrap_or("unknown"),
-                )),
-                bip39::Error::InvalidChecksum => Error::InvalidMnemonic(
-                    "Invalid checksum. Please verify all words are correct and in the right order."
-                        .to_string(),
-                ),
-                _ => Error::InvalidMnemonic(format!("Invalid mnemonic: {e}")),
-            })?;
-            let master_sk = SecretKey::from_seed(&mnemonic.to_seed(""));
-            let master_pk = master_sk.public_key();
-            let fingerprint = if req.save_secrets {
-                self.keychain.add_mnemonic(&mnemonic, b"")?
-            } else {
-                self.keychain.add_public_key(&master_pk)?
-            };
-
-            (fingerprint, Some(master_sk), master_pk)
-        };
-
-        self.wallet_config.wallets.push(Wallet {
-            name: req.name,
-            fingerprint,
-            emoji: req.emoji,
-            ..Default::default()
-        });
-        self.config.global.fingerprint = Some(fingerprint);
-
-        self.save_keychain()?;
-        self.save_config()?;
-
-        let pool = self.connect_to_database(fingerprint).await?;
-        let db = Database::new(pool);
-
-        let mut tx = db.tx().await?;
-
-        if req.unhardened.unwrap_or(true) {
-            let intermediate_unhardened_pk = master_to_wallet_unhardened_intermediate(&master_pk);
-
-            for index in 0..req.derivation_index {
-                let synthetic_key = intermediate_unhardened_pk
-                    .derive_unhardened(index)
-                    .derive_synthetic();
-                let p2_puzzle_hash = StandardArgs::curry_tree_hash(synthetic_key).into();
-                tx.insert_custody_p2_puzzle(
-                    p2_puzzle_hash,
-                    synthetic_key,
-                    Derivation {
-                        derivation_index: index,
-                        is_hardened: false,
-                    },
-                )
-                .await?;
-            }
-        }
-
-        if req.hardened.unwrap_or(true)
-            && let Some(master_sk) = master_sk
-        {
-            let intermediate_hardened_sk = master_to_wallet_hardened_intermediate(&master_sk);
-
-            for index in 0..req.derivation_index {
-                let synthetic_key = intermediate_hardened_sk
-                    .derive_hardened(index)
-                    .derive_synthetic()
-                    .public_key();
-                let p2_puzzle_hash = StandardArgs::curry_tree_hash(synthetic_key).into();
-                tx.insert_custody_p2_puzzle(
-                    p2_puzzle_hash,
-                    synthetic_key,
-                    Derivation {
-                        derivation_index: index,
-                        is_hardened: true,
-                    },
-                )
-                .await?;
-            }
-        }
-
-        tx.insert_arbor_p2_puzzle(master_pk).await?;
-
-        tx.commit().await?;
-
-        if req.login {
-            self.switch_wallet().await?;
-        }
-
-        Ok(ImportKeyResponse { fingerprint })
-    }
-
-    pub fn delete_database(&mut self, req: DeleteDatabase) -> Result<DeleteDatabaseResponse> {
-        let path = self.path.join("wallets").join(req.fingerprint.to_string());
-
-        if path.try_exists()? {
-            // Delete the specific SQLite file for this network
-            let db_file = path.join(format!("{}.sqlite", req.network));
-            if db_file.try_exists()? {
-                fs::remove_file(&db_file)?;
-            }
-        }
-
-        Ok(DeleteDatabaseResponse {})
-    }
-
-    pub fn delete_key(&mut self, req: DeleteKey) -> Result<DeleteKeyResponse> {
-        self.keychain.remove(req.fingerprint);
-
-        self.wallet_config
-            .wallets
-            .retain(|wallet| wallet.fingerprint != req.fingerprint);
-
-        if self.config.global.fingerprint == Some(req.fingerprint) {
-            self.config.global.fingerprint = None;
-        }
-
-        self.save_keychain()?;
-        self.save_config()?;
-
-        let path = self.path.join("wallets").join(req.fingerprint.to_string());
-        if path.try_exists()? {
-            fs::remove_dir_all(path)?;
-        }
-
-        Ok(DeleteKeyResponse {})
     }
 
     pub fn rename_key(&mut self, req: RenameKey) -> Result<RenameKeyResponse> {
@@ -383,5 +155,267 @@ impl Sage {
         }
 
         Ok(GetKeysResponse { keys })
+    }
+
+    /// Parses an imported key, stores it in the keychain and records the
+    /// wallet in the config. Returns the fingerprint it was filed under along
+    /// with the keys it resolved to, so the caller can derive addresses.
+    pub fn add_key(&mut self, req: &ImportKey) -> Result<(u32, Option<SecretKey>, PublicKey)> {
+        let mut key_hex = req.key.as_str();
+
+        if key_hex.starts_with("0x") || key_hex.starts_with("0X") {
+            key_hex = &key_hex[2..];
+        }
+
+        let (fingerprint, master_sk, master_pk) = if let Ok(bytes) = hex::decode(key_hex) {
+            if let Ok(master_pk) = bytes.clone().try_into() {
+                let master_pk = PublicKey::from_bytes(&master_pk)?;
+                let fingerprint = self.keychain.add_public_key(&master_pk)?;
+                (fingerprint, None, master_pk)
+            } else if let Ok(master_sk) = bytes.try_into() {
+                let master_sk = SecretKey::from_bytes(&master_sk)?;
+                let master_pk = master_sk.public_key();
+
+                let fingerprint = if req.save_secrets {
+                    self.keychain.add_secret_key(&master_sk, b"")?
+                } else {
+                    self.keychain.add_public_key(&master_pk)?
+                };
+
+                (fingerprint, Some(master_sk), master_pk)
+            } else {
+                return Err(Error::InvalidKey);
+            }
+        } else {
+            let words: Vec<&str> = req.key.split_whitespace().collect();
+            let word_count = words.len();
+
+            if word_count != 12 && word_count != 24 {
+                return Err(Error::InvalidMnemonic(format!(
+                    "Expected 12 or 24 words, but got {word_count}."
+                )));
+            }
+
+            let mnemonic = Mnemonic::from_str(&req.key).map_err(|e| match e {
+                bip39::Error::BadWordCount(count) => {
+                    Error::InvalidMnemonic(format!("Expected 12 or 24 words, but got {count}."))
+                }
+                bip39::Error::UnknownWord(idx) => Error::InvalidMnemonic(format!(
+                    "Word #{} ({}) is not a valid BIP39 word.",
+                    idx + 1,
+                    words.get(idx).copied().unwrap_or("unknown"),
+                )),
+                bip39::Error::InvalidChecksum => Error::InvalidMnemonic(
+                    "Invalid checksum. Please verify all words are correct and in the right order."
+                        .to_string(),
+                ),
+                _ => Error::InvalidMnemonic(format!("Invalid mnemonic: {e}")),
+            })?;
+            let master_sk = SecretKey::from_seed(&mnemonic.to_seed(""));
+            let master_pk = master_sk.public_key();
+            let fingerprint = if req.save_secrets {
+                self.keychain.add_mnemonic(&mnemonic, b"")?
+            } else {
+                self.keychain.add_public_key(&master_pk)?
+            };
+
+            (fingerprint, Some(master_sk), master_pk)
+        };
+
+        self.wallet_config.wallets.push(Wallet {
+            name: req.name.clone(),
+            fingerprint,
+            emoji: req.emoji.clone(),
+            ..Default::default()
+        });
+        self.config.global.fingerprint = Some(fingerprint);
+
+        self.save_keychain()?;
+        self.save_config()?;
+
+        Ok((fingerprint, master_sk, master_pk))
+    }
+
+    /// Precomputes the wallet addresses for a freshly imported key.
+    pub async fn insert_imported_derivations(
+        &self,
+        db: &Database<E>,
+        req: &ImportKey,
+        master_sk: Option<SecretKey>,
+        master_pk: PublicKey,
+    ) -> Result<()> {
+        let mut tx = db.tx().await?;
+
+        if req.unhardened.unwrap_or(true) {
+            let intermediate_unhardened_pk = master_to_wallet_unhardened_intermediate(&master_pk);
+
+            for index in 0..req.derivation_index {
+                let synthetic_key = intermediate_unhardened_pk
+                    .derive_unhardened(index)
+                    .derive_synthetic();
+                let p2_puzzle_hash = StandardArgs::curry_tree_hash(synthetic_key).into();
+                tx.insert_custody_p2_puzzle(
+                    p2_puzzle_hash,
+                    synthetic_key,
+                    Derivation {
+                        derivation_index: index,
+                        is_hardened: false,
+                    },
+                )
+                .await?;
+            }
+        }
+
+        if req.hardened.unwrap_or(true)
+            && let Some(master_sk) = master_sk
+        {
+            let intermediate_hardened_sk = master_to_wallet_hardened_intermediate(&master_sk);
+
+            for index in 0..req.derivation_index {
+                let synthetic_key = intermediate_hardened_sk
+                    .derive_hardened(index)
+                    .derive_synthetic()
+                    .public_key();
+                let p2_puzzle_hash = StandardArgs::curry_tree_hash(synthetic_key).into();
+                tx.insert_custody_p2_puzzle(
+                    p2_puzzle_hash,
+                    synthetic_key,
+                    Derivation {
+                        derivation_index: index,
+                        is_hardened: true,
+                    },
+                )
+                .await?;
+            }
+        }
+
+        tx.insert_arbor_p2_puzzle(master_pk).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Clears the record groups a resync request asks for, so the next sync
+    /// rebuilds them from the network. Reclaiming the freed space is left to
+    /// the caller, since that is a file operation only native can do.
+    pub async fn resync_database(&self, db: &Database<E>, req: Resync) -> Result<ResyncResponse> {
+        let mut records = Vec::new();
+
+        if req.delete_coins {
+            records.push(ResyncRecords::Coins);
+        }
+
+        if req.delete_assets {
+            records.push(ResyncRecords::Assets);
+        }
+
+        if req.delete_files {
+            records.push(ResyncRecords::Files);
+        }
+
+        if req.delete_offers {
+            records.push(ResyncRecords::Offers);
+        }
+
+        if req.delete_addresses {
+            records.push(ResyncRecords::Addresses);
+        }
+
+        if req.delete_blocks {
+            records.push(ResyncRecords::Blocks);
+        }
+
+        db.resync(&records).await?;
+
+        Ok(ResyncResponse {})
+    }
+}
+
+#[cfg(feature = "native")]
+impl Sage {
+    pub async fn login(&mut self, req: Login) -> Result<LoginResponse> {
+        self.config.global.fingerprint = Some(req.fingerprint);
+        self.save_config()?;
+        self.switch_wallet().await?;
+        Ok(LoginResponse {})
+    }
+
+    pub async fn logout(&mut self, _req: Logout) -> Result<LogoutResponse> {
+        self.config.global.fingerprint = None;
+        self.save_config()?;
+        self.switch_wallet().await?;
+        Ok(LogoutResponse {})
+    }
+
+    pub async fn resync(&mut self, req: Resync) -> Result<ResyncResponse> {
+        let login = self.config.global.fingerprint == Some(req.fingerprint);
+
+        if login {
+            self.config.global.fingerprint = None;
+            self.switch_wallet().await?;
+        }
+
+        let pool = self.connect_to_database(req.fingerprint).await?;
+
+        let response = self
+            .resync_database(&Database::new(pool.clone()), req)
+            .await?;
+
+        // reclaim disk space after all those deletes
+        query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(&pool)
+            .await?;
+        query("VACUUM").execute(&pool).await?;
+        query("ANALYZE").execute(&pool).await?;
+
+        if login {
+            self.config.global.fingerprint = Some(req.fingerprint);
+            self.save_config()?;
+            self.switch_wallet().await?;
+        }
+
+        Ok(response)
+    }
+
+    pub async fn import_key(&mut self, req: ImportKey) -> Result<ImportKeyResponse> {
+        let (fingerprint, master_sk, master_pk) = self.add_key(&req)?;
+
+        let pool = self.connect_to_database(fingerprint).await?;
+        let db = Database::new(pool);
+
+        self.insert_imported_derivations(&db, &req, master_sk, master_pk)
+            .await?;
+
+        if req.login {
+            self.switch_wallet().await?;
+        }
+
+        Ok(ImportKeyResponse { fingerprint })
+    }
+
+    pub fn delete_database(&mut self, req: DeleteDatabase) -> Result<DeleteDatabaseResponse> {
+        let path = self.path.join("wallets").join(req.fingerprint.to_string());
+
+        if path.try_exists()? {
+            // Delete the specific SQLite file for this network
+            let db_file = path.join(format!("{}.sqlite", req.network));
+            if db_file.try_exists()? {
+                fs::remove_file(&db_file)?;
+            }
+        }
+
+        Ok(DeleteDatabaseResponse {})
+    }
+
+    pub fn delete_key(&mut self, req: DeleteKey) -> Result<DeleteKeyResponse> {
+        self.remove_key(req.fingerprint)?;
+
+        let path = self.path.join("wallets").join(req.fingerprint.to_string());
+        if path.try_exists()? {
+            fs::remove_dir_all(path)?;
+        }
+
+        Ok(DeleteKeyResponse {})
     }
 }

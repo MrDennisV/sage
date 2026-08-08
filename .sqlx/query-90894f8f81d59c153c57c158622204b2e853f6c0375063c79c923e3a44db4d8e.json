@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO offer_coins (offer_id, coin_id) \nVALUES ((SELECT id FROM offers WHERE hash = ?), (SELECT id FROM coins WHERE hash = ?))\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "90894f8f81d59c153c57c158622204b2e853f6c0375063c79c923e3a44db4d8e"
+}

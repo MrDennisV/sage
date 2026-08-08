@@ -1,13 +1,11 @@
-use chia_wallet_sdk::{
-    driver::{
-        TransferNftById, calculate_royalty_payments, calculate_trade_price_amounts,
-        calculate_trade_prices,
-    },
-    prelude::*,
+use crate::prelude::*;
+use chia_sdk_driver::{
+    TransferNftById, calculate_royalty_payments, calculate_trade_price_amounts,
+    calculate_trade_prices,
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
-use sage_database::NftOfferInfo;
+use sage_database::{NftOfferInfo, SqlExecutor};
 
 use crate::{Wallet, WalletError};
 
@@ -17,7 +15,7 @@ pub struct TakenOffer {
     pub spend_bundle: SpendBundle,
 }
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn take_offer(
         &self,
         spend_bundle: SpendBundle,
@@ -95,13 +93,8 @@ impl Wallet {
             .iter()
             .map(|coin_spend| coin_spend.coin.coin_id())
             .collect_vec();
-        self.select_spends_excluding(
-            &mut ctx,
-            &mut spends,
-            &actions,
-            &offer_input_coin_ids,
-        )
-        .await?;
+        self.select_spends_excluding(&mut ctx, &mut spends, &actions, &offer_input_coin_ids)
+            .await?;
 
         // Reset DIDs and reveal trade prices
         let mut royalty_nft_count = 0;

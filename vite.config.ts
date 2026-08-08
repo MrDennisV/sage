@@ -37,4 +37,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  define: {
+    __IS_EXTENSION__: false,
+  },
 });

@@ -1,19 +1,16 @@
-use chia_wallet_sdk::{
-    driver::{
-        FeeAction, MetadataUpdate, MintNftAction, SendAction, TransferNftById, UpdateNftAction,
-        UriKind,
-    },
-    prelude::*,
-    puzzles::NFT_METADATA_UPDATER_DEFAULT_HASH,
+use chia_sdk_driver::{
+    FeeAction, MetadataUpdate, MintNftAction, SendAction, TransferNftById, UpdateNftAction, UriKind,
 };
 use sage_api::{CreateTransaction, NftUriKind, TransactionResponse};
+use sage_database::SqlExecutor;
+use sage_wallet::prelude::*;
 use sage_wallet::{Hint, calculate_memos};
 
 use crate::{
     ConfirmationInfo, Result, Sage, parse_amount, parse_any_asset_id, parse_coin_ids, parse_memos,
 };
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub async fn create_transaction(&self, req: CreateTransaction) -> Result<TransactionResponse> {
         let wallet = self.wallet()?;
 

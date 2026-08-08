@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT minter_hash \nFROM owned_nfts \nWHERE minter_hash IS NOT NULL\nORDER BY minter_hash ASC    \nLIMIT ? OFFSET ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "minter_hash",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "877ec7249f3325c7c14a3d69e86da8da9b06949649c5e51639ede9bb5214b10d"
+}

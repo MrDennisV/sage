@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(DISTINCT minter_hash) AS total_count \nFROM owned_nfts \nWHERE minter_hash IS NOT NULL\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "total_count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e8134a5e8b640397fec6de6b7e97e42242fae98ec1374524d10bd497964400a3"
+}

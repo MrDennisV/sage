@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE files SET data = ?, mime_type = ?, is_hash_match = ?\nWHERE hash = ?\nAND (data IS NULL OR NOT is_hash_match)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "26591f13c9d70c2fdbccae6dcf21893bd0ff1dbd2daac365c403761bb70526d4"
+}

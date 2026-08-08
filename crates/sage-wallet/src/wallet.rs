@@ -1,17 +1,14 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::{HashMap, HashSet};
 
-use chia_wallet_sdk::{
-    chia::puzzle_types::offer::SettlementPaymentsSolution,
-    driver::{P2DelegatedConditionsLayer, SpendKind, SpendableAsset},
-    prelude::*,
-    puzzles::SETTLEMENT_PAYMENT_HASH,
-    types::puzzles::P2DelegatedConditionsSolution,
-};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::prelude::*;
+use chia_puzzle_types::offer::SettlementPaymentsSolution;
+use chia_sdk_driver::{P2DelegatedConditionsLayer, SpendKind, SpendableAsset};
+use chia_sdk_types::puzzles::P2DelegatedConditionsSolution;
 use indexmap::IndexMap;
-use sage_database::{AssetKind, CoinKind, Database, DeserializePrimitive, P2Puzzle};
+use sage_database::{AssetKind, CoinKind, Database, DeserializePrimitive, P2Puzzle, SqlExecutor};
 
 mod cats;
 mod coin_management;
@@ -33,19 +30,33 @@ pub use options::*;
 
 use crate::WalletError;
 
-#[derive(Debug)]
-pub struct Wallet {
-    pub db: Database,
-    pub fingerprint: u32,
-    pub intermediate_pk: PublicKey,
-    pub genesis_challenge: Bytes32,
-    pub agg_sig_constants: AggSigConstants,
-    pub change_p2_puzzle_hash: Option<Bytes32>,
+cfg_if::cfg_if! {
+    if #[cfg(feature = "native")] {
+        #[derive(Debug)]
+        pub struct Wallet<E: SqlExecutor = sage_database::SqlxExecutor> {
+            pub db: Database<E>,
+            pub fingerprint: u32,
+            pub intermediate_pk: PublicKey,
+            pub genesis_challenge: Bytes32,
+            pub agg_sig_constants: AggSigConstants,
+            pub change_p2_puzzle_hash: Option<Bytes32>,
+        }
+    } else {
+        #[derive(Debug)]
+        pub struct Wallet<E: SqlExecutor> {
+            pub db: Database<E>,
+            pub fingerprint: u32,
+            pub intermediate_pk: PublicKey,
+            pub genesis_challenge: Bytes32,
+            pub agg_sig_constants: AggSigConstants,
+            pub change_p2_puzzle_hash: Option<Bytes32>,
+        }
+    }
 }
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     pub fn new(
-        db: Database,
+        db: Database<E>,
         fingerprint: u32,
         intermediate_pk: PublicKey,
         genesis_challenge: Bytes32,
@@ -326,7 +337,11 @@ impl Wallet {
             p2_puzzles.insert(p2_puzzle_hash, p2_puzzle);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+
+        #[cfg(target_arch = "wasm32")]
+        let timestamp = (js_sys::Date::now() / 1000.0) as u64;
 
         let spends = spends.prepare(ctx, deltas, Relation::AssertConcurrent)?;
         let mut coin_spends = HashMap::new();

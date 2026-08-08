@@ -15,7 +15,7 @@ categories = { workspace = true }
 workspace = true
 
 [dependencies]
-sage = { workspace = true }
+sage = { workspace = true, features = ["native"] }
 sage-api = { workspace = true, features = ["openapi"] }
 sage-api-macro = { workspace = true }
 axum = { workspace = true }
@@ -37,4 +37,4 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 bip39 = { workspace = true }
 chia-wallet-sdk = { workspace = true, features = ["peer-simulator"] }
-sage-wallet = { workspace = true }
+sage-wallet = { workspace = true, features = ["native"] }

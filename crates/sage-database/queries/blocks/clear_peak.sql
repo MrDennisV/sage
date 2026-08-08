@@ -1,0 +1,1 @@
+UPDATE blocks SET is_peak = FALSE WHERE is_peak = TRUE

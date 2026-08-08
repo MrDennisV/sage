@@ -14,9 +14,30 @@ categories = { workspace = true }
 [lints]
 workspace = true
 
+[features]
+default = ["sqlite"]
+sqlite = ["dep:sqlx", "dep:chia-wallet-sdk"]
+
 [dependencies]
-chia-wallet-sdk = { workspace = true }
-sqlx = { workspace = true, features = ["sqlite"] }
+# Full SDK is only needed by the sqlite (native) implementation
+chia-wallet-sdk = { workspace = true, optional = true }
+sqlx = { workspace = true, features = ["sqlite"], optional = true }
+
+# Individual chia sub-crates for types, available on every target
+chia-bls = { workspace = true }
+chia-protocol = { workspace = true }
+chia-puzzle-types = { workspace = true }
+chia-sdk-driver = { workspace = true }
+chia-sdk-types = { workspace = true }
+chia-sdk-utils = { workspace = true }
+clvm-traits = { workspace = true }
+clvm-utils = { workspace = true }
+clvmr = { workspace = true }
+
+cfg-if = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

@@ -1,6 +1,9 @@
-use crate::{Asset, Convert, Database, DatabaseTx, Result};
-use chia_wallet_sdk::prelude::*;
-use sqlx::SqliteExecutor;
+use chia_protocol::Bytes32;
+
+use crate::{
+    Asset, Convert, Database, DatabaseError, DatabaseTx, Result, SqlAccess, SqlExecutor, SqlRow,
+    sql_file,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
@@ -32,25 +35,25 @@ pub struct OfferedAsset {
     pub royalty: u64,
 }
 
-impl Database {
+impl<E: SqlExecutor> Database<E> {
     pub async fn offer(&self, offer_id: Bytes32) -> Result<Option<OfferRow>> {
-        offer(&self.pool, offer_id).await
+        offer(&self.executor, offer_id).await
     }
 
     pub async fn offer_assets(&self, offer_id: Bytes32) -> Result<Vec<OfferedAsset>> {
-        offer_assets(&self.pool, offer_id).await
+        offer_assets(&self.executor, offer_id).await
     }
 
     pub async fn delete_offer(&self, offer_id: Bytes32) -> Result<()> {
-        delete_offer(&self.pool, offer_id).await
+        delete_offer(&self.executor, offer_id).await
     }
 
     pub async fn offers(&self, status: Option<OfferStatus>) -> Result<Vec<OfferRow>> {
-        offers(&self.pool, status).await
+        offers(&self.executor, status).await
     }
 
     pub async fn update_offer_status(&self, offer_id: Bytes32, status: OfferStatus) -> Result<()> {
-        update_offer_status(&self.pool, offer_id, status).await
+        update_offer_status(&self.executor, offer_id, status).await
     }
 
     pub async fn offers_for_asset(
@@ -58,17 +61,17 @@ impl Database {
         asset_id: Bytes32,
         status: Option<OfferStatus>,
     ) -> Result<Vec<OfferRow>> {
-        offers_for_asset(&self.pool, asset_id, status).await
+        offers_for_asset(&self.executor, asset_id, status).await
     }
 }
 
-impl DatabaseTx<'_> {
+impl<E: SqlExecutor> DatabaseTx<'_, E> {
     pub async fn insert_offer(&mut self, offer: OfferRow) -> Result<()> {
-        insert_offer(&mut *self.tx, offer).await
+        insert_offer(&mut self.tx, offer).await
     }
 
     pub async fn insert_offered_coin(&mut self, offer_id: Bytes32, coin_id: Bytes32) -> Result<()> {
-        insert_offered_coin(&mut *self.tx, offer_id, coin_id).await
+        insert_offered_coin(&mut self.tx, offer_id, coin_id).await
     }
 
     pub async fn insert_offer_asset(
@@ -80,7 +83,7 @@ impl DatabaseTx<'_> {
         is_requested: bool,
     ) -> Result<()> {
         insert_offer_asset(
-            &mut *self.tx,
+            &mut self.tx,
             offer_id,
             asset_id,
             amount,
@@ -95,7 +98,7 @@ impl DatabaseTx<'_> {
         offer_id: Bytes32,
         status: OfferStatus,
     ) -> Result<()> {
-        update_offer_status(&mut *self.tx, offer_id, status).await
+        update_offer_status(&mut self.tx, offer_id, status).await
     }
 
     pub async fn offers_for_asset(
@@ -103,113 +106,76 @@ impl DatabaseTx<'_> {
         asset_id: Bytes32,
         status: Option<OfferStatus>,
     ) -> Result<Vec<OfferRow>> {
-        offers_for_asset(&mut *self.tx, asset_id, status).await
+        offers_for_asset(&mut self.tx, asset_id, status).await
     }
 }
 
+/// Decodes the columns shared by the `offer`, `offers` and `offers_for_asset`
+/// queries.
+fn offer_row_from_row(row: &SqlRow) -> Result<OfferRow> {
+    Ok(OfferRow {
+        offer_id: row.converted("offer_id")?,
+        encoded_offer: row.text("encoded_offer")?,
+        expiration_height: row.opt_i64("expiration_height")?.map(|h| h as u32),
+        expiration_timestamp: row.opt_i64("expiration_timestamp")?.map(|t| t as u64),
+        fee: row.converted("fee")?,
+        status: match row.i64("status")? {
+            0 => OfferStatus::Pending,
+            1 => OfferStatus::Active,
+            2 => OfferStatus::Completed,
+            3 => OfferStatus::Cancelled,
+            4 => OfferStatus::Expired,
+            _ => return Err(DatabaseError::InvalidEnumVariant),
+        },
+        inserted_timestamp: row.i64("inserted_timestamp")? as u64,
+    })
+}
+
 async fn offers_for_asset(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     asset_id: Bytes32,
     status: Option<OfferStatus>,
 ) -> Result<Vec<OfferRow>> {
     let status_value = status.map(|s| s as u8);
-    let asset_id_ref = asset_id.as_ref();
 
-    let rows = sqlx::query!(
-        "SELECT
-            offers.hash as offer_id,
-            encoded_offer,
-            fee,
-            status,
-            expiration_height,
-            expiration_timestamp,
-            inserted_timestamp
-        FROM offers
-        INNER JOIN offer_assets ON offers.id = offer_assets.offer_id
-        INNER JOIN assets ON offer_assets.asset_id = assets.id
-        WHERE assets.hash = ? AND offers.status = ? OR ? IS NULL
-        ORDER BY inserted_timestamp DESC",
-        asset_id_ref,
-        status_value,
-        status_value
+    conn.fetch_all(
+        sql_file!("offers/offers_for_asset.sql"),
+        vec![asset_id.into(), status_value.into(), status_value.into()],
     )
-    .fetch_all(conn)
-    .await?;
-
-    rows.into_iter()
-        .map(|row| {
-            Ok(OfferRow {
-                offer_id: row.offer_id.convert()?,
-                encoded_offer: row.encoded_offer,
-                expiration_height: row.expiration_height.map(|h| h as u32),
-                expiration_timestamp: row.expiration_timestamp.map(|t| t as u64),
-                fee: row.fee.convert()?,
-                status: match row.status {
-                    0 => OfferStatus::Pending,
-                    1 => OfferStatus::Active,
-                    2 => OfferStatus::Completed,
-                    3 => OfferStatus::Cancelled,
-                    4 => OfferStatus::Expired,
-                    _ => return Err(crate::DatabaseError::InvalidEnumVariant),
-                },
-                inserted_timestamp: row.inserted_timestamp as u64,
-            })
-        })
-        .collect()
+    .await?
+    .iter()
+    .map(offer_row_from_row)
+    .collect()
 }
 
-async fn offer_assets(
-    conn: impl SqliteExecutor<'_>,
-    offer_id: Bytes32,
-) -> Result<Vec<OfferedAsset>> {
-    let offer_id_ref = offer_id.as_ref();
-
-    let rows = sqlx::query!(
-        "
-        SELECT
-            offers.hash as offer_id, assets.hash as asset_id,
-            amount, royalty, is_requested, 
-            assets.description, assets.is_sensitive_content,
-            assets.is_visible, assets.icon_url, assets.name,
-            assets.ticker, assets.precision, assets.kind,
-            assets.hidden_puzzle_hash
-        FROM offer_assets 
-        INNER JOIN assets ON offer_assets.asset_id = assets.id
-        INNER JOIN offers ON offer_assets.offer_id = offers.id
-        WHERE offers.hash = ?
-        ",
-        offer_id_ref
-    )
-    .fetch_all(conn)
-    .await?;
-
-    rows.into_iter()
+async fn offer_assets(mut conn: impl SqlAccess, offer_id: Bytes32) -> Result<Vec<OfferedAsset>> {
+    conn.fetch_all(sql_file!("offers/offer_assets.sql"), vec![offer_id.into()])
+        .await?
+        .iter()
         .map(|row| {
             Ok(OfferedAsset {
-                offer_id: row.offer_id.convert()?,
+                offer_id: row.converted("offer_id")?,
                 asset: Asset {
-                    hash: row.asset_id.convert()?,
-                    description: row.description,
-                    is_sensitive_content: row.is_sensitive_content,
-                    is_visible: row.is_visible,
-                    icon_url: row.icon_url,
-                    kind: row.kind.convert()?,
-                    name: row.name,
-                    ticker: row.ticker,
-                    precision: row.precision.convert()?,
-                    hidden_puzzle_hash: row.hidden_puzzle_hash.convert()?,
+                    hash: row.converted("asset_id")?,
+                    description: row.opt_text("description")?,
+                    is_sensitive_content: row.i64("is_sensitive_content")? != 0,
+                    is_visible: row.i64("is_visible")? != 0,
+                    icon_url: row.opt_text("icon_url")?,
+                    kind: row.i64("kind")?.convert()?,
+                    name: row.opt_text("name")?,
+                    ticker: row.opt_text("ticker")?,
+                    precision: row.i64("precision")?.convert()?,
+                    hidden_puzzle_hash: row.opt_converted("hidden_puzzle_hash")?,
                 },
-                amount: row.amount.convert()?,
-                royalty: row.royalty.convert()?,
-                is_requested: row.is_requested,
+                amount: row.converted("amount")?,
+                royalty: row.converted("royalty")?,
+                is_requested: row.i64("is_requested")? != 0,
             })
         })
         .collect()
 }
 
-async fn insert_offer(conn: impl SqliteExecutor<'_>, offer: OfferRow) -> Result<()> {
-    let offer_id_ref = offer.offer_id.as_ref();
-
+async fn insert_offer(mut conn: impl SqlAccess, offer: OfferRow) -> Result<()> {
     let expiration_height: Option<i64> = offer.expiration_height.map(Into::into);
     let expiration_timestamp: Option<i64> = offer
         .expiration_timestamp
@@ -218,183 +184,101 @@ async fn insert_offer(conn: impl SqliteExecutor<'_>, offer: OfferRow) -> Result<
     let inserted_timestamp: i64 = offer.inserted_timestamp.try_into()?;
     let fee = offer.fee.to_be_bytes().to_vec();
 
-    sqlx::query(
-        "
-        INSERT OR IGNORE INTO offers (
-            hash, encoded_offer, fee, status,
-            expiration_height, expiration_timestamp, inserted_timestamp
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ",
+    conn.execute(
+        sql_file!("offers/insert_offer.sql"),
+        vec![
+            offer.offer_id.into(),
+            offer.encoded_offer.into(),
+            fee.into(),
+            (offer.status as u8).into(),
+            expiration_height.into(),
+            expiration_timestamp.into(),
+            inserted_timestamp.into(),
+        ],
     )
-    .bind(offer_id_ref)
-    .bind(offer.encoded_offer)
-    .bind(fee)
-    .bind(offer.status as u8)
-    .bind(expiration_height)
-    .bind(expiration_timestamp)
-    .bind(inserted_timestamp)
-    .execute(conn)
     .await?;
+
     Ok(())
 }
 
 async fn insert_offer_asset(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     offer_id: Bytes32,
     asset_id: Bytes32,
     amount: u64,
     royalty: u64,
     is_requested: bool,
 ) -> Result<()> {
-    let offer_id_ref = offer_id.as_ref();
-    let asset_id_ref = asset_id.as_ref();
-
     let amount = amount.to_be_bytes().to_vec();
     let royalty = royalty.to_be_bytes().to_vec();
 
-    sqlx::query(
-        "
-        INSERT OR IGNORE INTO offer_assets (offer_id, asset_id, amount, royalty, is_requested) 
-        VALUES (
-            (SELECT id FROM offers WHERE hash = ?), 
-            (SELECT id FROM assets WHERE hash = ?), 
-            ?, ?, ?
-        )
-        ",
+    conn.execute(
+        sql_file!("offers/insert_offer_asset.sql"),
+        vec![
+            offer_id.into(),
+            asset_id.into(),
+            amount.into(),
+            royalty.into(),
+            is_requested.into(),
+        ],
     )
-    .bind(offer_id_ref)
-    .bind(asset_id_ref)
-    .bind(amount)
-    .bind(royalty)
-    .bind(is_requested)
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
 async fn insert_offered_coin(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     offer_hash: Bytes32,
     coin_hash: Bytes32,
 ) -> Result<()> {
-    let offer_id_ref = offer_hash.as_ref();
-    let coin_hash_ref = coin_hash.as_ref();
-    sqlx::query(
-        "INSERT OR IGNORE INTO offer_coins (offer_id, coin_id) 
-        VALUES ((SELECT id FROM offers WHERE hash = ?), (SELECT id FROM coins WHERE hash = ?))",
+    conn.execute(
+        sql_file!("offers/insert_offered_coin.sql"),
+        vec![offer_hash.into(), coin_hash.into()],
     )
-    .bind(offer_id_ref)
-    .bind(coin_hash_ref)
-    .execute(conn)
     .await?;
 
     Ok(())
 }
 
-async fn offer(conn: impl SqliteExecutor<'_>, offer_id: Bytes32) -> Result<Option<OfferRow>> {
-    let offer_id_ref = offer_id.as_ref();
-    let row = sqlx::query!(
-        "SELECT
-            hash as offer_id,
-            encoded_offer,
-            fee,
-            status,
-            expiration_height,
-            expiration_timestamp,
-            inserted_timestamp
-        FROM offers WHERE hash = ?",
-        offer_id_ref
-    )
-    .fetch_optional(conn)
-    .await?;
-
-    row.map(|row| {
-        Ok(OfferRow {
-            offer_id: row.offer_id.convert()?,
-            encoded_offer: row.encoded_offer,
-            expiration_height: row.expiration_height.map(|h| h as u32),
-            expiration_timestamp: row.expiration_timestamp.map(|t| t as u64),
-            fee: row.fee.convert()?,
-            status: match row.status {
-                0 => OfferStatus::Pending,
-                1 => OfferStatus::Active,
-                2 => OfferStatus::Completed,
-                3 => OfferStatus::Cancelled,
-                4 => OfferStatus::Expired,
-                _ => return Err(crate::DatabaseError::InvalidEnumVariant),
-            },
-            inserted_timestamp: row.inserted_timestamp as u64,
-        })
-    })
-    .transpose()
+async fn offer(mut conn: impl SqlAccess, offer_id: Bytes32) -> Result<Option<OfferRow>> {
+    conn.fetch_all(sql_file!("offers/offer.sql"), vec![offer_id.into()])
+        .await?
+        .first()
+        .map(offer_row_from_row)
+        .transpose()
 }
 
-async fn offers(
-    conn: impl SqliteExecutor<'_>,
-    status: Option<OfferStatus>,
-) -> Result<Vec<OfferRow>> {
+async fn offers(mut conn: impl SqlAccess, status: Option<OfferStatus>) -> Result<Vec<OfferRow>> {
     let status_value = status.map(|s| s as u8);
-    let rows = sqlx::query!(
-        "SELECT
-            hash as offer_id,
-            encoded_offer,
-            fee,
-            status,
-            expiration_height,
-            expiration_timestamp,
-            inserted_timestamp
-        FROM offers 
-        WHERE status = ? OR ? IS NULL
-        ORDER BY inserted_timestamp DESC",
-        status_value,
-        status_value
-    )
-    .fetch_all(conn)
-    .await?;
 
-    rows.into_iter()
-        .map(|row| {
-            Ok(OfferRow {
-                offer_id: row.offer_id.convert()?,
-                encoded_offer: row.encoded_offer,
-                expiration_height: row.expiration_height.map(|h| h as u32),
-                expiration_timestamp: row.expiration_timestamp.map(|t| t as u64),
-                fee: row.fee.convert()?,
-                status: match row.status {
-                    0 => OfferStatus::Pending,
-                    1 => OfferStatus::Active,
-                    2 => OfferStatus::Completed,
-                    3 => OfferStatus::Cancelled,
-                    4 => OfferStatus::Expired,
-                    _ => return Err(crate::DatabaseError::InvalidEnumVariant),
-                },
-                inserted_timestamp: row.inserted_timestamp as u64,
-            })
-        })
-        .collect()
+    conn.fetch_all(
+        sql_file!("offers/offers.sql"),
+        vec![status_value.into(), status_value.into()],
+    )
+    .await?
+    .iter()
+    .map(offer_row_from_row)
+    .collect()
 }
 
-async fn delete_offer(conn: impl SqliteExecutor<'_>, offer_id: Bytes32) -> Result<()> {
-    let offer_id_ref = offer_id.as_ref();
-    sqlx::query("DELETE FROM offers WHERE hash = ?")
-        .bind(offer_id_ref)
-        .execute(conn)
+async fn delete_offer(mut conn: impl SqlAccess, offer_id: Bytes32) -> Result<()> {
+    conn.execute(sql_file!("offers/delete_offer.sql"), vec![offer_id.into()])
         .await?;
+
     Ok(())
 }
 
 async fn update_offer_status(
-    conn: impl SqliteExecutor<'_>,
+    mut conn: impl SqlAccess,
     offer_id: Bytes32,
     status: OfferStatus,
 ) -> Result<()> {
-    let offer_id_bytes = offer_id.to_vec();
-    sqlx::query("UPDATE offers SET status = ? WHERE hash = ?")
-        .bind(status as u8)
-        .bind(&offer_id_bytes)
-        .execute(conn)
-        .await?;
+    conn.execute(
+        sql_file!("offers/update_offer_status.sql"),
+        vec![(status as u8).into(), offer_id.to_vec().into()],
+    )
+    .await?;
+
     Ok(())
 }

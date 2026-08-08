@@ -4,6 +4,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { usePeers } from '@/hooks/usePeers';
+import { supportsSageApps } from '@/lib/platform';
 import { logoutAndUpdateState, useWalletState } from '@/state';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
@@ -35,7 +36,6 @@ export function TopNav({ isCollapsed }: NavProps) {
   const className = isCollapsed ? 'h-5 w-5' : 'h-4 w-4';
 
   const isIos = platform() === 'ios';
-  const isMobile = platform() === 'android' || isIos;
 
   return (
     <nav
@@ -112,7 +112,7 @@ export function TopNav({ isCollapsed }: NavProps) {
       >
         <ArrowDownUp className={className} />
       </NavLink>
-      {!isMobile && (
+      {supportsSageApps && (
         <NavLink
           url={'/apps'}
           isCollapsed={isCollapsed}
@@ -163,17 +163,21 @@ export function BottomNav({ isCollapsed }: NavProps) {
       aria-label={t`Secondary navigation`}
     >
       <NavLink
-        url={'/peers'}
+        url={__IS_EXTENSION__ ? '/settings?tab=network' : '/peers'}
         isCollapsed={isCollapsed}
         message={
           isSynced ? (
-            <>
-              {peerMaxHeight ? (
-                <Trans>{peerCount} peers synced</Trans>
-              ) : (
-                <Trans>Connecting...</Trans>
-              )}
-            </>
+            __IS_EXTENSION__ ? (
+              <Trans>Synced</Trans>
+            ) : (
+              <>
+                {peerMaxHeight ? (
+                  <Trans>{peerCount} peers synced</Trans>
+                ) : (
+                  <Trans>Connecting...</Trans>
+                )}
+              </>
+            )
           ) : coinsSynced ? (
             <Trans>
               Downloading {checkedFiles} / {totalFiles}
@@ -186,7 +190,11 @@ export function BottomNav({ isCollapsed }: NavProps) {
         }
         customTooltip={
           <>
-            {peerCount} {peerCount === 1 ? t`peer` : t`peers`}{' '}
+            {!__IS_EXTENSION__ && (
+              <>
+                {peerCount} {peerCount === 1 ? t`peer` : t`peers`}{' '}
+              </>
+            )}
             {isSynced ? (
               peerMaxHeight ? (
                 <Trans>synced to peak {peerMaxHeight}</Trans>
@@ -201,7 +209,7 @@ export function BottomNav({ isCollapsed }: NavProps) {
           </>
         }
       >
-        {isSynced && peerMaxHeight > 0 ? (
+        {isSynced && (__IS_EXTENSION__ || peerMaxHeight > 0) ? (
           <MonitorCheck
             className={`${className} text-emerald-600`}
             aria-hidden='true'

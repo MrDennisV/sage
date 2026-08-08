@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
-use chia_wallet_sdk::{chia::puzzle_types::nft::NftMetadata, driver::BURN_PUZZLE_HASH, prelude::*};
+use chia_puzzle_types::nft::NftMetadata;
+use chia_sdk_driver::BURN_PUZZLE_HASH;
 use sage_api::{
     Amount, CoinJson, CoinSpendJson, SpendBundleJson, TransactionInput, TransactionOutput,
     TransactionSummary,
 };
-use sage_assets::{Data, base64_data_uri};
-use sage_database::{Asset, AssetKind, Database};
+use sage_assets::Data;
+use sage_database::{Asset, AssetKind, Database, SqlExecutor};
+use sage_wallet::portable::base64_data_uri;
+use sage_wallet::prelude::*;
 use sage_wallet::{CoinKind, Transaction, compute_nft_info};
 
 use crate::{Error, Result, Sage};
@@ -18,7 +21,7 @@ pub struct ConfirmationInfo {
     pub nft_data: HashMap<Bytes32, Data>,
 }
 
-impl Sage {
+impl<E: SqlExecutor> Sage<E> {
     pub(crate) async fn summarize(
         &self,
         coin_spends: Vec<CoinSpend>,
@@ -136,8 +139,8 @@ pub struct ExtractedNftData {
     pub is_sensitive_content: bool,
 }
 
-pub async fn extract_nft_data(
-    db: Option<&Database>,
+pub async fn extract_nft_data<E: SqlExecutor>(
+    db: Option<&Database<E>>,
     onchain_metadata: Option<NftMetadata>,
     cache: &ConfirmationInfo,
 ) -> Result<ExtractedNftData> {

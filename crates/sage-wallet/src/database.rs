@@ -1,22 +1,28 @@
-use std::collections::{HashMap, HashSet};
-
-use chia_wallet_sdk::{
-    chia::puzzle_types::{LineageProof, nft::NftMetadata},
-    prelude::*,
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
 };
-use sage_assets::base64_data_uri;
+
+use crate::prelude::*;
+use chia_puzzle_types::{LineageProof, nft::NftMetadata};
+
+use futures_lite::StreamExt;
+use futures_util::stream::FuturesUnordered;
+use sage_assets::{DexieCat, UriError, fetch_uri};
 use sage_database::{
-    Asset, AssetKind, Database, DatabaseTx, DidCoinInfo, NftCoinInfo, OptionCoinInfo,
-    SerializedNftInfo,
+    Asset, AssetKind, Database, DatabaseTx, DidCoinInfo, NftCoinInfo, NftMetadataInfo,
+    OptionCoinInfo, ResizedImageKind, SerializedNftInfo, SqlExecutor,
 };
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
+use crate::portable::{base64_data_uri, timeout};
 use crate::{
-    ChildKind, OptionContext, PuzzleContext, Transaction, WalletError, WalletPeer, compute_nft_info,
+    ChildKind, OptionContext, PeerApi, PendingPeer, PuzzleContext, Transaction, WalletError,
+    compute_nft_info,
 };
 
-pub async fn validate_wallet_coin(
-    tx: &mut DatabaseTx<'_>,
+pub async fn validate_wallet_coin<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_id: Bytes32,
     info: &ChildKind,
 ) -> Result<bool, WalletError> {
@@ -43,8 +49,168 @@ pub async fn validate_wallet_coin(
     Ok(true)
 }
 
-pub async fn insert_puzzle(
-    tx: &mut DatabaseTx<'_>,
+/// Records every token Dexie knows about, which is what the interface offers to
+/// pick from when issuing an offer or taking a swap. Returns whether anything
+/// was recorded, since an empty catalog means the listing gave nothing back and
+/// there is nothing for the caller to announce.
+pub async fn refresh_cat_catalog<E: SqlExecutor>(
+    db: &Database<E>,
+    testnet: bool,
+) -> Result<bool, WalletError> {
+    let mut page = 1;
+    let mut recorded = false;
+
+    while refresh_cat_catalog_page(db, testnet, page).await? {
+        recorded = true;
+        page += 1;
+    }
+
+    Ok(recorded)
+}
+
+/// How long a single URI may take before it is treated as a failure and left
+/// for a later round.
+const URI_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Downloads the content behind one batch of NFT URIs and records it, which is
+/// where an NFT's name, description, collection and picture come from. Returns
+/// whether anything was downloaded, since an empty batch means every URI has
+/// been checked recently and there is nothing for the caller to announce.
+pub async fn download_nft_uris<E: SqlExecutor>(
+    db: &Database<E>,
+    testnet: bool,
+    batch_size: u32,
+) -> Result<bool, WalletError> {
+    let batch = db
+        .candidates_for_download(60 * 60 * 24, 3, batch_size)
+        .await?;
+
+    if batch.is_empty() {
+        return Ok(false);
+    }
+
+    // The downloads are network bound and independent, so they run together;
+    // the results are recorded one at a time because they share a connection.
+    let mut downloads = FuturesUnordered::new();
+
+    for item in batch {
+        downloads.push(async {
+            let data = timeout(URI_TIMEOUT, fetch_uri(item.uri.clone(), testnet)).await;
+            (item, data)
+        });
+    }
+
+    while let Some((item, data)) = downloads.next().await {
+        let mut tx = db.tx().await?;
+
+        match data.unwrap_or(Err(UriError::Timeout)) {
+            Ok(data) => {
+                let is_hash_match = data.hash == item.hash;
+
+                if !is_hash_match {
+                    warn!(
+                        "Hash mismatch for URI {} (expected {} but found {})",
+                        item.uri, item.hash, data.hash
+                    );
+                }
+
+                if let Some(thumbnail) = &data.thumbnail {
+                    tx.update_nft_data_hash_urls(
+                        item.hash,
+                        base64_data_uri(&thumbnail.icon, "image/png"),
+                    )
+                    .await?;
+                }
+
+                for nft in tx.nfts_with_metadata_hash(item.hash).await? {
+                    let info = compute_nft_info(nft.minter_hash, &data.blob);
+
+                    let collection_id = info.collection.as_ref().map(|collection| collection.hash);
+
+                    if let Some(collection) = info.collection {
+                        tx.insert_collection(collection).await?;
+                    }
+
+                    tx.update_nft_metadata(
+                        nft.hash,
+                        NftMetadataInfo {
+                            name: info.name,
+                            description: info.description,
+                            is_sensitive_content: info.sensitive_content,
+                            collection_id: collection_id.unwrap_or_default(),
+                        },
+                    )
+                    .await?;
+                }
+
+                tx.update_file(item.hash, data.blob, data.mime_type, is_hash_match)
+                    .await?;
+
+                if let Some(thumbnail) = data.thumbnail {
+                    tx.insert_resized_image(item.hash, ResizedImageKind::Icon, thumbnail.icon)
+                        .await?;
+
+                    tx.insert_resized_image(
+                        item.hash,
+                        ResizedImageKind::Thumbnail,
+                        thumbnail.thumbnail,
+                    )
+                    .await?;
+                }
+
+                tx.update_checked_uri(item.hash, item.uri).await?;
+            }
+            Err(error) => {
+                debug!("Error fetching URI {}: {error}", item.uri);
+                tx.update_failed_uri(item.hash, item.uri).await?;
+            }
+        }
+
+        tx.commit().await?;
+    }
+
+    Ok(true)
+}
+
+/// Records one page of the token catalog, returning whether the page held
+/// anything. Callers that cannot spend an unbounded amount of time in one go
+/// walk the pages themselves and stop wherever they need to.
+pub async fn refresh_cat_catalog_page<E: SqlExecutor>(
+    db: &Database<E>,
+    testnet: bool,
+    page: u32,
+) -> Result<bool, WalletError> {
+    let cats = DexieCat::fetch_page(page, testnet).await?;
+
+    if cats.is_empty() {
+        return Ok(false);
+    }
+
+    let mut tx = db.tx().await?;
+
+    for cat in cats {
+        tx.insert_asset(Asset {
+            hash: cat.hash,
+            name: cat.name,
+            ticker: cat.ticker,
+            precision: 3,
+            icon_url: cat.icon_url,
+            description: cat.description,
+            is_sensitive_content: false,
+            is_visible: true,
+            hidden_puzzle_hash: cat.hidden_puzzle_hash,
+            kind: AssetKind::Token,
+        })
+        .await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(true)
+}
+
+pub async fn insert_puzzle<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_state: CoinState,
     info: ChildKind,
     context: PuzzleContext,
@@ -249,8 +415,8 @@ pub async fn insert_puzzle(
     Ok(true)
 }
 
-pub async fn insert_nft(
-    tx: &mut DatabaseTx<'_>,
+pub async fn insert_nft<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_state: CoinState,
     lineage_proof: Option<LineageProof>,
     info: SerializedNftInfo,
@@ -371,8 +537,8 @@ pub async fn insert_nft(
     Ok(())
 }
 
-pub async fn insert_option(
-    tx: &mut DatabaseTx<'_>,
+pub async fn insert_option<E: SqlExecutor>(
+    tx: &mut DatabaseTx<'_, E>,
     coin_state: CoinState,
     lineage_proof: Option<LineageProof>,
     info: OptionInfo,
@@ -509,9 +675,9 @@ pub async fn insert_option(
     Ok(true)
 }
 
-pub async fn insert_transaction(
-    db: &Database,
-    peer: &WalletPeer,
+pub async fn insert_transaction<E: SqlExecutor>(
+    db: &Database<E>,
+    peer: &impl PeerApi,
     genesis_challenge: Bytes32,
     transaction_id: Bytes32,
     transaction: Transaction,
@@ -534,7 +700,7 @@ pub async fn insert_transaction(
         }
     }
 
-    let peer = peer.with_pending(cached_coin_states, coin_spends.clone());
+    let peer = PendingPeer::new(peer, cached_coin_states, coin_spends.clone());
 
     let mut puzzle_contexts = HashMap::new();
 

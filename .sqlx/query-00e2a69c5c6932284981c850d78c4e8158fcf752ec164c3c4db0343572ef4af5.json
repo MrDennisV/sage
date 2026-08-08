@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO lineage_proofs\n    (coin_id, parent_parent_coin_hash, parent_inner_puzzle_hash, parent_amount)\nVALUES\n    ((SELECT id FROM coins WHERE hash = ?), ?, ?, ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "00e2a69c5c6932284981c850d78c4e8158fcf752ec164c3c4db0343572ef4af5"
+}

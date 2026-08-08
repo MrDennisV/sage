@@ -10,6 +10,8 @@ export default defineConfig({
     {
       path: './src/locales/{locale}/messages',
       include: ['src'],
+      // Generated wasm bindings, which the extractor can't parse.
+      exclude: ['src/extension/wasm/**'],
     },
   ],
 });

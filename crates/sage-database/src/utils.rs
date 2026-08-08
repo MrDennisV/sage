@@ -1,4 +1,5 @@
-use chia_wallet_sdk::{chia::protocol::BytesImpl, prelude::*};
+use chia_bls::{PublicKey, Signature};
+use chia_protocol::BytesImpl;
 
 use crate::{DatabaseError, Result};
 

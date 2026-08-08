@@ -20,11 +20,10 @@ use tokio::{
     time::{sleep, timeout},
 };
 use tracing::{debug, info, warn};
-use wallet_sync::{add_new_subscriptions, incremental_sync, sync_wallet};
 
 use crate::{
-    BlockTimeQueue, CatQueue, NftUriQueue, OfferQueue, PuzzleQueue, TransactionQueue, Wallet,
-    WalletError,
+    BlockTimeQueue, CatQueue, EventSink, NftUriQueue, OfferQueue, PuzzleQueue, SyncEvent,
+    TransactionQueue, Wallet, WalletError, WalletPeer, add_new_subscriptions, incremental_sync,
 };
 
 mod dns;
@@ -32,13 +31,81 @@ mod options;
 mod peer_discovery;
 mod peer_state;
 mod sync_command;
-mod sync_event;
-mod wallet_sync;
 
 pub use options::*;
 pub use peer_state::*;
 pub use sync_command::*;
-pub use sync_event::*;
+
+/// Forwards sync events and subscription requests into the `SyncManager` channels.
+#[derive(Debug, Clone)]
+pub struct ChannelSink {
+    event_sender: mpsc::Sender<SyncEvent>,
+    command_sender: mpsc::Sender<SyncCommand>,
+}
+
+impl ChannelSink {
+    pub fn new(
+        event_sender: mpsc::Sender<SyncEvent>,
+        command_sender: mpsc::Sender<SyncCommand>,
+    ) -> Self {
+        Self {
+            event_sender,
+            command_sender,
+        }
+    }
+}
+
+impl EventSink for ChannelSink {
+    async fn send_event(&self, event: SyncEvent) {
+        self.event_sender.send(event).await.ok();
+    }
+
+    async fn subscribe_puzzles(&self, puzzle_hashes: Vec<Bytes32>) {
+        self.command_sender
+            .send(SyncCommand::SubscribePuzzles { puzzle_hashes })
+            .await
+            .ok();
+    }
+
+    async fn subscribe_coins(&self, coin_ids: Vec<Bytes32>) {
+        self.command_sender
+            .send(SyncCommand::SubscribeCoins { coin_ids })
+            .await
+            .ok();
+    }
+}
+
+/// Runs the portable wallet sync against a peer, then records the peer's peak
+/// so delta sync can resume from it.
+async fn sync_wallet_against_peer(
+    wallet: Arc<Wallet>,
+    peer: WalletPeer,
+    state: Arc<Mutex<PeerState>>,
+    sink: ChannelSink,
+    delta_sync: bool,
+) -> Result<(), WalletError> {
+    info!("Starting sync against peer {}", peer.socket_addr());
+
+    crate::sync_wallet(wallet.clone(), &peer, &sink, delta_sync).await?;
+
+    if delta_sync {
+        if let Some((height, header_hash)) = state.lock().await.peak_of(peer.socket_addr().ip()) {
+            info!(
+                "Updating peak from peer to {} with header hash {}",
+                height, header_hash
+            );
+
+            wallet
+                .db
+                .insert_block(height, header_hash, None, true)
+                .await?;
+        } else {
+            warn!("No peak found");
+        }
+    }
+
+    Ok(())
+}
 
 pub struct SyncManager {
     options: SyncOptions,
@@ -242,8 +309,7 @@ impl SyncManager {
             &peer,
             self.pending_coin_subscriptions.clone(),
             self.pending_puzzle_subscriptions.clone(),
-            self.event_sender.clone(),
-            self.command_sender.clone(),
+            &ChannelSink::new(self.event_sender.clone(), self.command_sender.clone()),
         )
         .await
         {
@@ -331,8 +397,7 @@ impl SyncManager {
                         wallet,
                         message.items,
                         true,
-                        &self.event_sender,
-                        &self.command_sender,
+                        &ChannelSink::new(self.event_sender.clone(), self.command_sender.clone()),
                     )
                     .await?;
 
@@ -378,12 +443,11 @@ impl SyncManager {
                     && let Some(peer) = state.acquire_peer()
                 {
                     let ip = peer.socket_addr().ip();
-                    let task = tokio::spawn(sync_wallet(
+                    let task = tokio::spawn(sync_wallet_against_peer(
                         wallet.clone(),
                         peer,
                         self.state.clone(),
-                        self.event_sender.clone(),
-                        self.command_sender.clone(),
+                        ChannelSink::new(self.event_sender.clone(), self.command_sender.clone()),
                         self.options.delta_sync,
                     ));
                     *sync = InitialWalletSync::Syncing { ip, task };

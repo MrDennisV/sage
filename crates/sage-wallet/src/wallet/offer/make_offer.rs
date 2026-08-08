@@ -1,15 +1,12 @@
-use chia_wallet_sdk::{
-    chia::puzzle_types::offer::{NotarizedPayment, Payment},
-    driver::{
-        TransferNftById, calculate_royalty_payments, calculate_trade_price_amounts,
-        calculate_trade_prices,
-    },
-    prelude::*,
-    puzzles::SETTLEMENT_PAYMENT_HASH,
+use crate::prelude::*;
+use chia_puzzle_types::offer::{NotarizedPayment, Payment};
+use chia_sdk_driver::{
+    TransferNftById, calculate_royalty_payments, calculate_trade_price_amounts,
+    calculate_trade_prices,
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
-use sage_database::{NftOfferInfo, OptionOfferInfo};
+use sage_database::{NftOfferInfo, OptionOfferInfo, SqlExecutor};
 
 use crate::{Wallet, WalletError};
 
@@ -38,7 +35,7 @@ pub struct RequestedCat {
     pub hidden_puzzle_hash: Option<Bytes32>,
 }
 
-impl Wallet {
+impl<E: SqlExecutor> Wallet<E> {
     pub async fn make_offer(
         &self,
         offered: Offered,

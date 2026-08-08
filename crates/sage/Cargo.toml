@@ -14,21 +14,56 @@ categories = { workspace = true }
 [lints]
 workspace = true
 
+[features]
+default = ["native"]
+native = [
+    "dep:chia-wallet-sdk",
+    "dep:sqlx",
+    "dep:tokio",
+    "dep:tracing-subscriber",
+    "dep:tracing-appender",
+    "sage-wallet/native",
+    "sage-database/sqlite",
+    "sage-assets/native",
+]
+
 [dependencies]
 sage-api = { workspace = true }
 sage-database = { workspace = true }
 sage-config = { workspace = true }
 sage-keychain = { workspace = true }
-sage-wallet = { workspace = true }
+# The Coinset HTTP peer is how transactions reach the network where there is
+# no peer connection pool, such as in the browser.
+sage-wallet = { workspace = true, features = ["coinset"] }
 sage-assets = { workspace = true }
+
+# Full SDK is only needed for networking and peers (native)
+chia-wallet-sdk = { workspace = true, features = ["rustls"], optional = true }
+
+# Individual chia sub-crates, available on every target
+chia-bls = { workspace = true }
+chia-protocol = { workspace = true }
+chia-puzzle-types = { workspace = true }
+chia-sdk-driver = { workspace = true, features = ["offer-compression"] }
+chia-sdk-signer = { workspace = true }
+chia-sdk-utils = { workspace = true }
+clvm-traits = { workspace = true }
+clvmr = { workspace = true }
+
+# Native-only dependencies
+tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
+tracing-appender = { workspace = true, optional = true }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"], optional = true }
+tokio = { workspace = true, optional = true }
+
+# Offer codes are exchanged over plain HTTPS, which reqwest routes through the
+# browser's fetch on wasm and through rustls natively.
+reqwest = { workspace = true, default-features = false, features = ["json"] }
+
+cfg-if = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-tracing-appender = { workspace = true }
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
-tokio = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 toml = { workspace = true, features = ["preserve_order"] }
-chia-wallet-sdk = { workspace = true, features = ["rustls"] }
 hex = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
@@ -41,3 +76,9 @@ base64 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true }
 serde_json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { workspace = true, default-features = false, features = ["http2", "rustls-tls-webpki-roots", "json"] }

@@ -17,6 +17,8 @@
     "build:builtin-apps": "pnpm run generate:app-docs && pnpm run build:packages && pnpm run build:system-apps && pnpm run build:builtin-static",
     "build:frontend": "tsc -b && vite build",
     "build": "pnpm run build:builtin-apps && pnpm run build:frontend",
+    "build:wasm": "wasm-pack build crates/sage-wasm --target web --out-dir ../../src/extension/wasm --out-name sage_wasm",
+    "build:extension": "npm run build:wasm && vite build --config vite.config.extension.ts && node scripts/post-build-extension.js",
     "tauri:dev": "pnpm run build && concurrently -k -n SYSTEM,TAURI -c yellow,cyan \"pnpm dev:system-apps\" \"tauri dev\"",
     "tauri:build": "pnpm build && tauri build",
     "lint": "eslint .",
@@ -85,6 +87,7 @@
     "react-router-dom": "^6.30.3",
     "react-toastify": "^11.0.5",
     "spoiled": "^0.4.0",
+    "sql.js": "^1.14.1",
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
     "tauri-plugin-safe-area-insets": "^0.1.0",
@@ -101,9 +104,11 @@
     "@lingui/swc-plugin": "^5.10.1",
     "@lingui/vite-plugin": "^5.9.0",
     "@tauri-apps/cli": "^2.10.0",
+    "@types/chrome": "^0.2.2",
     "@types/node": "^22.19.10",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
+    "@types/sql.js": "^1.4.11",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react-swc": "^3.11.0",
@@ -113,6 +118,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
+    "playwright": "^1.62.0",
     "postcss": "^8.5.6",
     "prettier": "^3.8.1",
     "tailwindcss": "^3.4.19",
@@ -123,5 +129,11 @@
     "chokidar": "^3.6.0",
     "ws": "^8.18.0",
     "concurrently": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "volta": {
+    "node": "24.18.0"
   }
 }
