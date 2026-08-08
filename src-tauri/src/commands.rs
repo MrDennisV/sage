@@ -4,9 +4,6 @@ use crate::{
     app_state::{self, AppState, Initialized, RpcTask},
     error::Result,
 };
-use chia_wallet_sdk::utils::Address;
-use reqwest::StatusCode;
-use sage::Error;
 use sage_api::{wallet_connect::*, *};
 use sage_api_macro::impl_endpoints_tauri;
 #[cfg(not(mobile))]
