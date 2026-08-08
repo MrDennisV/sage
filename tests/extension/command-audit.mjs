@@ -32,7 +32,9 @@ function read(path) {
 function invokedCommands(source) {
   const names = new Set();
 
-  for (const match of source.matchAll(/invoke(?:<[^>]*>)?\(\s*'([a-z0-9_]+)'/g)) {
+  for (const match of source.matchAll(
+    /invoke(?:<[^>]*>)?\(\s*'([a-z0-9_]+)'/g,
+  )) {
     names.add(match[1]);
   }
 

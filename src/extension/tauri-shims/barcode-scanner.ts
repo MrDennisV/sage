@@ -17,9 +17,9 @@ export enum Format {
   PDF417 = 'PDF_417',
 }
 
-export async function scan(
-  _options?: { formats?: Format[] },
-): Promise<{ content: string; format: string }> {
+export async function scan(_options?: {
+  formats?: Format[];
+}): Promise<{ content: string; format: string }> {
   throw new Error('Barcode scanning is not available in browser extensions');
 }
 

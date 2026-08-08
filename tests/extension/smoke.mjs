@@ -15,10 +15,7 @@ const profile = mkdtempSync(join(tmpdir(), 'sage-ext-'));
 const context = await chromium.launchPersistentContext(profile, {
   channel: 'chromium',
   headless: true,
-  args: [
-    `--disable-extensions-except=${dist}`,
-    `--load-extension=${dist}`,
-  ],
+  args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
 });
 
 try {
@@ -45,7 +42,10 @@ try {
     popup.evaluate(
       ([cmd, req]) =>
         new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: 'COMMAND', cmd, args: { req } }, resolve);
+          chrome.runtime.sendMessage(
+            { type: 'COMMAND', cmd, args: { req } },
+            resolve,
+          );
         }),
       [cmd, req],
     );
@@ -77,7 +77,9 @@ try {
 
   const key = await check('get_key', {});
   if (key.key?.fingerprint !== fingerprint) {
-    throw new Error(`active key is ${JSON.stringify(key.key)}, expected ${fingerprint}`);
+    throw new Error(
+      `active key is ${JSON.stringify(key.key)}, expected ${fingerprint}`,
+    );
   }
   console.log('active key confirmed');
 
@@ -87,8 +89,13 @@ try {
   const { networks } = await check('get_networks', {});
   console.log('networks available:', networks.map((n) => n.name).join(', '));
 
-  const { derivations } = await check('get_derivations', { offset: 0, limit: 3 });
-  console.log(`derivations: ${derivations.length}, first: ${derivations[0]?.address}`);
+  const { derivations } = await check('get_derivations', {
+    offset: 0,
+    limit: 3,
+  });
+  console.log(
+    `derivations: ${derivations.length}, first: ${derivations[0]?.address}`,
+  );
 
   if (derivations.length === 0) {
     throw new Error('no derivations were created for the imported key');

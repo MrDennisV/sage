@@ -7,7 +7,8 @@ import { join, resolve } from 'path';
 const dist = resolve('dist-extension');
 const profile = mkdtempSync(join(tmpdir(), 'sage-i18n-'));
 const context = await chromium.launchPersistentContext(profile, {
-  channel: 'chromium', headless: true,
+  channel: 'chromium',
+  headless: true,
   args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
 });
 
@@ -24,7 +25,13 @@ try {
     }
   });
 
-  for (const route of ['#/wallet', '#/settings', '#/settings?tab=network', '#/settings?tab=wallet', '#/transactions']) {
+  for (const route of [
+    '#/wallet',
+    '#/settings',
+    '#/settings?tab=network',
+    '#/settings?tab=wallet',
+    '#/transactions',
+  ]) {
     await page.goto(`chrome-extension://${id}/popup.html${route}`);
     await page.waitForSelector('#root > *', { timeout: 20000 });
     await page.waitForTimeout(1500);

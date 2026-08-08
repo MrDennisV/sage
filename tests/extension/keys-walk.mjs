@@ -28,7 +28,10 @@ try {
     page.evaluate(
       ([c, r]) =>
         new Promise((res) =>
-          chrome.runtime.sendMessage({ type: 'COMMAND', cmd: c, args: { req: r } }, res),
+          chrome.runtime.sendMessage(
+            { type: 'COMMAND', cmd: c, args: { req: r } },
+            res,
+          ),
         ),
       [cmd, req],
     );

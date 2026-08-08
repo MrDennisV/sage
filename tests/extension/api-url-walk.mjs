@@ -27,7 +27,10 @@ try {
     page.evaluate(
       ([c, r]) =>
         new Promise((res) =>
-          chrome.runtime.sendMessage({ type: 'COMMAND', cmd: c, args: { req: r } }, res),
+          chrome.runtime.sendMessage(
+            { type: 'COMMAND', cmd: c, args: { req: r } },
+            res,
+          ),
         ),
       [cmd, req],
     );
@@ -43,7 +46,9 @@ try {
   const before = await check('get_networks');
   console.log(
     'defaults:',
-    before.networks.map((n) => `${n.name}=${n.api_url ?? '(default)'}`).join(', '),
+    before.networks
+      .map((n) => `${n.name}=${n.api_url ?? '(default)'}`)
+      .join(', '),
   );
 
   await check('set_network_api_url', {
@@ -60,7 +65,9 @@ try {
   console.log('custom url saved:', mainnet.api_url);
 
   // The sync should now fail against the bogus host, proving it is used.
-  const { data: mnemonic } = await send('generate_mnemonic', { use_24_words: true });
+  const { data: mnemonic } = await send('generate_mnemonic', {
+    use_24_words: true,
+  });
   const { data: imported } = await send('import_key', {
     name: 'Api',
     key: mnemonic.mnemonic,
@@ -78,7 +85,9 @@ try {
 
   // The configured host is unreachable, so a request failure proves the sync
   // used it; against the default endpoint the sync succeeds.
-  const usedCustomHost = errors.some((e) => e.includes('error sending request'));
+  const usedCustomHost = errors.some((e) =>
+    e.includes('error sending request'),
+  );
   console.log(
     usedCustomHost
       ? 'sync failed against the configured endpoint, as expected'

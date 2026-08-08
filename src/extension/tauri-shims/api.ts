@@ -47,10 +47,7 @@ export async function once<T>(
   return () => {};
 }
 
-export async function emit(
-  _event: string,
-  _payload?: unknown,
-): Promise<void> {}
+export async function emit(_event: string, _payload?: unknown): Promise<void> {}
 
 // --- @tauri-apps/api/webviewWindow ---
 export type WebviewWindow = ReturnType<typeof getCurrentWindow>;

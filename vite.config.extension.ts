@@ -7,8 +7,12 @@ import { defineConfig, Plugin } from 'vite';
 // to our extension adapter, regardless of whether they use
 // '@/bindings', '../bindings', or './bindings'
 function bindingsRedirectPlugin(): Plugin {
-  const bindingsPath = path.resolve(__dirname, 'src/bindings.ts').replace(/\\/g, '/');
-  const adapterPath = path.resolve(__dirname, 'src/extension/bindings-adapter.ts').replace(/\\/g, '/');
+  const bindingsPath = path
+    .resolve(__dirname, 'src/bindings.ts')
+    .replace(/\\/g, '/');
+  const adapterPath = path
+    .resolve(__dirname, 'src/extension/bindings-adapter.ts')
+    .replace(/\\/g, '/');
 
   return {
     name: 'bindings-redirect',
@@ -29,11 +33,15 @@ function bindingsRedirectPlugin(): Plugin {
 
       // Handle relative imports like '../bindings' or './bindings'
       if (
-        (source.endsWith('/bindings') || source === './bindings' || source === '../bindings') &&
+        (source.endsWith('/bindings') ||
+          source === './bindings' ||
+          source === '../bindings') &&
         !source.includes('bindings-adapter')
       ) {
         const importerDir = path.dirname(importer).replace(/\\/g, '/');
-        const resolved = path.resolve(importerDir, source + '.ts').replace(/\\/g, '/');
+        const resolved = path
+          .resolve(importerDir, source + '.ts')
+          .replace(/\\/g, '/');
         if (resolved === bindingsPath) {
           return adapterPath;
         }

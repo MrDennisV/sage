@@ -1,5 +1,11 @@
 // Post-build script: copies manifest.json, WASM files, and generates placeholder icons
-import { copyFileSync, mkdirSync, existsSync, readdirSync, writeFileSync } from 'fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  writeFileSync,
+} from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -35,7 +41,11 @@ if (existsSync(sqlWasmSrc)) {
 // Copy Sage icons from Tauri build
 mkdirSync(resolve(dist, 'icons'), { recursive: true });
 const tauriIcons = resolve(root, 'src-tauri/icons');
-const iconMap = { 16: 'Square30x30Logo.png', 48: 'Square44x44Logo.png', 128: '128x128.png' };
+const iconMap = {
+  16: 'Square30x30Logo.png',
+  48: 'Square44x44Logo.png',
+  128: '128x128.png',
+};
 for (const [size, file] of Object.entries(iconMap)) {
   const src = resolve(tauriIcons, file);
   if (existsSync(src)) {
@@ -43,4 +53,6 @@ for (const [size, file] of Object.entries(iconMap)) {
   }
 }
 console.log('Copied Sage icons');
-console.log('Extension build complete! Load dist-extension/ in chrome://extensions');
+console.log(
+  'Extension build complete! Load dist-extension/ in chrome://extensions',
+);

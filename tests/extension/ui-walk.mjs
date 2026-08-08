@@ -49,7 +49,9 @@ try {
   page.on('requestfailed', (request) => {
     if (missingThemeImage(request.url())) return;
 
-    failures.push(`[request] ${request.url()} :: ${request.failure()?.errorText}`);
+    failures.push(
+      `[request] ${request.url()} :: ${request.failure()?.errorText}`,
+    );
   });
 
   await page.goto(`chrome-extension://${id}/popup.html`);
@@ -59,12 +61,17 @@ try {
     page.evaluate(
       ([c, r]) =>
         new Promise((res) =>
-          chrome.runtime.sendMessage({ type: 'COMMAND', cmd: c, args: { req: r } }, res),
+          chrome.runtime.sendMessage(
+            { type: 'COMMAND', cmd: c, args: { req: r } },
+            res,
+          ),
         ),
       [cmd, req],
     );
 
-  const { data: mnemonic } = await send('generate_mnemonic', { use_24_words: true });
+  const { data: mnemonic } = await send('generate_mnemonic', {
+    use_24_words: true,
+  });
   const { data: imported } = await send('import_key', {
     name: 'Walk',
     key: mnemonic.mnemonic,
@@ -107,7 +114,9 @@ try {
     }
 
     const added = failures.slice(before);
-    console.log(`${route}: ${added.length ? `${added.length} error(s)` : 'clean'}`);
+    console.log(
+      `${route}: ${added.length ? `${added.length} error(s)` : 'clean'}`,
+    );
   }
 
   console.log('\n=== failures ===');

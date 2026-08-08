@@ -25,12 +25,6 @@ export async function exists(_path: string): Promise<boolean> {
   return false;
 }
 
-export async function mkdir(
-  _path: string,
-  _options?: any,
-): Promise<void> {}
+export async function mkdir(_path: string, _options?: any): Promise<void> {}
 
-export async function remove(
-  _path: string,
-  _options?: any,
-): Promise<void> {}
+export async function remove(_path: string, _options?: any): Promise<void> {}

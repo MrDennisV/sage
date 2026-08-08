@@ -14,30 +14,19 @@ export async function save(
   return null;
 }
 
-export async function open(
-  _options?: any,
-): Promise<string | string[] | null> {
+export async function open(_options?: any): Promise<string | string[] | null> {
   return null;
 }
 
-export async function message(
-  msg: string,
-  _options?: any,
-): Promise<boolean> {
+export async function message(msg: string, _options?: any): Promise<boolean> {
   window.alert(msg);
   return true;
 }
 
-export async function ask(
-  msg: string,
-  _options?: any,
-): Promise<boolean> {
+export async function ask(msg: string, _options?: any): Promise<boolean> {
   return window.confirm(msg);
 }
 
-export async function confirm(
-  msg: string,
-  _options?: any,
-): Promise<boolean> {
+export async function confirm(msg: string, _options?: any): Promise<boolean> {
   return window.confirm(msg);
 }

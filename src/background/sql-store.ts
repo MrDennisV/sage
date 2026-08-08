@@ -122,7 +122,8 @@ function toBinding(value: JsSqlValue): number | string | Uint8Array | null {
 
 function fromResult(value: unknown): JsSqlValue {
   if (value === null || value === undefined) return { type: 'null' };
-  if (value instanceof Uint8Array) return { type: 'blob', value: Array.from(value) };
+  if (value instanceof Uint8Array)
+    return { type: 'blob', value: Array.from(value) };
   if (typeof value === 'number') {
     return Number.isInteger(value)
       ? { type: 'int', value }
@@ -248,7 +249,9 @@ export async function deleteDatabases(fingerprint: number): Promise<void> {
   const idb = await openIdb();
 
   await new Promise<void>((resolve, reject) => {
-    const store = idb.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE);
+    const store = idb
+      .transaction(IDB_STORE, 'readwrite')
+      .objectStore(IDB_STORE);
     const request = store.getAllKeys();
 
     request.onsuccess = () => {
