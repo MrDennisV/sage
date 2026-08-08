@@ -10,6 +10,8 @@ export interface TokenSelectorProps {
   value: string | null | undefined;
   onChange: (value: string | null) => void;
   disabled?: (string | null)[];
+  /** Restricts the selectable assets to this list. Unrestricted when omitted. */
+  allowedAssetIds?: (string | null)[];
   className?: string;
   hideZeroBalance?: boolean;
   showAllCats?: boolean;
@@ -20,6 +22,7 @@ export function TokenSelector({
   value,
   onChange,
   disabled = [],
+  allowedAssetIds,
   className,
   hideZeroBalance = false,
   showAllCats = false,
@@ -65,10 +68,19 @@ export function TokenSelector({
     fetchTokens();
   }, [addError, includeXch, showAllCats]);
 
+  // Convert allowed list to handle null -> 'xch' conversion
+  const allowedIds = useMemo(
+    () =>
+      allowedAssetIds &&
+      new Set(allowedAssetIds.map((id) => (id === null ? 'xch' : id))),
+    [allowedAssetIds],
+  );
+
   // Filter tokens based on search term and visibility/balance settings
   const filteredTokens = useMemo(() => {
     return Object.values(tokens).filter((token) => {
       if (!token.visible) return false;
+      if (allowedIds && !allowedIds.has(token.asset_id ?? 'xch')) return false;
       if (hideZeroBalance && token.balance === 0) return false;
       if (!searchTerm) return true;
       if (isValidAssetId(searchTerm)) {
@@ -80,7 +92,13 @@ export function TokenSelector({
         token.ticker?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     });
-  }, [tokens, hideZeroBalance, searchTerm]);
+  }, [tokens, allowedIds, hideZeroBalance, searchTerm]);
+
+  const isSelectableAssetId = useCallback(
+    (assetId: string) =>
+      isValidAssetId(assetId) && (!allowedIds || allowedIds.has(assetId)),
+    [allowedIds],
+  );
 
   const handleSelect = useCallback(
     (assetId: string | null) => {
@@ -140,7 +158,7 @@ export function TokenSelector({
       renderItem={renderToken}
       onSearchChange={setSearchTerm}
       shouldFilter={false}
-      validateManualInput={isValidAssetId}
+      validateManualInput={isSelectableAssetId}
       onManualInput={handleManualInput}
       disabled={disabledIds}
       className={className}

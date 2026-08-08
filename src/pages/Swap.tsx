@@ -25,9 +25,10 @@ export function Swap() {
   const walletState = useWalletState();
   const navigate = useNavigate();
   const { addError } = useErrors();
-  const { isTestnet } = useNetwork();
+  const { network, isTestnet } = useNetwork();
 
   const [ownedTokens, setOwnedTokens] = useState<TokenRecord[]>([]);
+  const [swappableAssetIds, setSwappableAssetIds] = useState<string[]>([]);
 
   const [payAssetId, setPayAssetId] = useState<string | null | undefined>();
   const [payAmount, setPayAmount] = useState('');
@@ -59,6 +60,24 @@ export function Swap() {
     return () => clearInterval(interval);
   }, [updateCats]);
 
+  useEffect(() => {
+    if (network === null) return;
+
+    fetchDexieSwapAssetIds(isTestnet, addError).then(setSwappableAssetIds);
+  }, [network, isTestnet, addError]);
+
+  // Dexie only quotes a CAT against XCH, so picking a CAT on one side leaves
+  // XCH as the only option on the other.
+  const selectablePayAssetIds = useMemo(
+    () => (receiveAssetId ? [null] : [null, ...swappableAssetIds]),
+    [receiveAssetId, swappableAssetIds],
+  );
+
+  const selectableReceiveAssetIds = useMemo(
+    () => (payAssetId ? [null] : [null, ...swappableAssetIds]),
+    [payAssetId, swappableAssetIds],
+  );
+
   const updateReceiveAmount = useCallback(
     async (receiveAssetId: string | null, payAmount: string) => {
       const mojoAmount = toMojos(payAmount, payAssetId === null ? 12 : 3);
@@ -81,15 +100,10 @@ export function Swap() {
         mojoAmount,
         'pay',
         isTestnet,
+        addError,
       );
 
-      if (!quote) {
-        addError({
-          kind: 'dexie',
-          reason: 'Failed to get quote from Dexie. Please try again later.',
-        });
-        return;
-      }
+      if (!quote) return;
 
       setReceiveAmount(
         toDecimal(quote.amount, receiveAssetId === null ? 12 : 3),
@@ -127,15 +141,10 @@ export function Swap() {
         mojoAmount,
         'receive',
         isTestnet,
+        addError,
       );
 
-      if (!quote) {
-        addError({
-          kind: 'dexie',
-          reason: 'Failed to get quote from Dexie. Please try again later.',
-        });
-        return;
-      }
+      if (!quote) return;
 
       setPayAmount(toDecimal(quote.amount, payAssetId === null ? 12 : 3));
 
@@ -204,6 +213,7 @@ export function Swap() {
                   hideZeroBalance={true}
                   showAllCats={false}
                   includeXch={true}
+                  allowedAssetIds={selectablePayAssetIds}
                   disabled={
                     receiveAssetId === undefined ? undefined : [receiveAssetId]
                   }
@@ -274,6 +284,7 @@ export function Swap() {
                   hideZeroBalance={false}
                   showAllCats={true}
                   includeXch={true}
+                  allowedAssetIds={selectableReceiveAssetIds}
                   disabled={payAssetId === undefined ? undefined : [payAssetId]}
                 />
                 <div className='flex flex-grow-0'>
@@ -369,12 +380,43 @@ export function Swap() {
   );
 }
 
+// Dexie quotes a subset of the CATs the wallet knows about, so the catalog
+// cannot be used to populate the swap selectors.
+async function fetchDexieSwapAssetIds(
+  isTestnet: boolean,
+  addError: (error: CustomError) => void,
+): Promise<string[]> {
+  try {
+    const response = await fetch(dexieApiUrl('v1/swap/tokens', isTestnet));
+    const data = await response.json();
+
+    if (!data.success) {
+      addError({
+        kind: 'dexie',
+        reason:
+          data.error_message ??
+          `Failed to load swappable tokens from Dexie (status ${response.status}).`,
+      });
+      return [];
+    }
+
+    return (data.tokens as { id: string }[]).map((token) => token.id);
+  } catch (error: unknown) {
+    addError({
+      kind: 'dexie',
+      reason: `Failed to load swappable tokens from Dexie: ${error}`,
+    });
+    return [];
+  }
+}
+
 async function getDexieQuote(
   payAssetId: string | null,
   receiveAssetId: string | null,
   amount: string,
   amountKind: 'pay' | 'receive',
   isTestnet: boolean,
+  addError: (error: CustomError) => void,
 ) {
   try {
     const response = await fetch(
@@ -384,6 +426,17 @@ async function getDexieQuote(
       ),
     );
     const data = await response.json();
+
+    if (!data.success) {
+      addError({
+        kind: 'dexie',
+        reason:
+          data.error_message ??
+          `Failed to get quote from Dexie (status ${response.status}).`,
+      });
+      return null;
+    }
+
     return {
       amount: (amountKind === 'pay'
         ? data.quote.to_amount
@@ -391,7 +444,10 @@ async function getDexieQuote(
       networkFee: data.quote.suggested_tx_fee as number,
     };
   } catch (error: unknown) {
-    console.error(error);
+    addError({
+      kind: 'dexie',
+      reason: `Failed to get quote from Dexie: ${error}`,
+    });
     return null;
   }
 }
