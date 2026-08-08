@@ -25,4 +25,7 @@ pub enum UriError {
 
     #[error("Failed to create thumbnail: {0}")]
     Thumbnail(#[from] ThumbnailError),
+
+    #[error("Invalid XCH/USD price response")]
+    InvalidPriceResponse,
 }

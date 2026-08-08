@@ -122,7 +122,7 @@ msgstr ""
 #~ msgid "{peerCount, plural, one {# peer} other {# peers}}"
 #~ msgstr "{peerCount, plural, one {# 节点} other {# 节点}}"
 
-#: src/components/Nav.tsx:165
+#: src/components/Nav.tsx:175
 msgid "{peerCount} peers synced"
 msgstr ""
 
@@ -335,7 +335,7 @@ msgstr ""
 msgid "Address to check"
 msgstr ""
 
-#: src/components/Nav.tsx:102
+#: src/components/Nav.tsx:104
 msgid "Addresses"
 msgstr "地址"
 
@@ -390,6 +390,10 @@ msgstr ""
 
 #: src/walletconnect/RequestDialog.tsx:611
 msgid "Approving"
+msgstr ""
+
+#: src/components/Nav.tsx:119
+msgid "Apps"
 msgstr ""
 
 #: src/components/ThemeCard.tsx:204
@@ -504,8 +508,7 @@ msgstr ""
 msgid "Automatically start the RPC server when the app launches"
 msgstr ""
 
-#: src/components/Header.tsx:59
-#: src/components/Header.tsx:141
+#: src/components/Header.tsx:50
 msgid "Back"
 msgstr "返回"
 
@@ -1010,11 +1013,11 @@ msgstr ""
 msgid "Connected to {totalPeersCount} peers"
 msgstr "已连接到 {totalPeersCount} 个节点"
 
-#: src/components/Nav.tsx:192
+#: src/components/Nav.tsx:202
 msgid "connecting..."
 msgstr "连接中..."
 
-#: src/components/Nav.tsx:167
+#: src/components/Nav.tsx:177
 #: src/pages/Settings.tsx:534
 msgid "Connecting..."
 msgstr ""
@@ -1452,7 +1455,7 @@ msgstr "显示名称"
 msgid "Done"
 msgstr "确定"
 
-#: src/components/Nav.tsx:172
+#: src/components/Nav.tsx:182
 msgid "Downloading {checkedFiles} / {totalFiles}"
 msgstr ""
 
@@ -2294,13 +2297,13 @@ msgstr ""
 msgid "Login"
 msgstr "登录"
 
-#: src/components/Nav.tsx:230
-#: src/components/Nav.tsx:236
+#: src/components/Nav.tsx:240
 #: src/components/Nav.tsx:246
+#: src/components/Nav.tsx:256
 msgid "Logout"
 msgstr "退出"
 
-#: src/components/Nav.tsx:42
+#: src/components/Nav.tsx:44
 msgid "Main navigation"
 msgstr ""
 
@@ -2471,7 +2474,7 @@ msgstr ""
 #~ msgid "Navigate to: {content}"
 #~ msgstr ""
 
-#: src/components/Header.tsx:82
+#: src/components/MobileNavSheet.tsx:42
 msgid "Navigation menu"
 msgstr ""
 
@@ -2592,7 +2595,7 @@ msgid "NFT view options"
 msgstr ""
 
 #: src/components/MultiSelectActions.tsx:271
-#: src/components/Nav.tsx:58
+#: src/components/Nav.tsx:60
 #: src/components/NftGroupCard.tsx:466
 #: src/components/NftPageTitle.tsx:44
 msgid "NFTs"
@@ -2819,7 +2822,7 @@ msgstr ""
 msgid "Offering"
 msgstr ""
 
-#: src/components/Nav.tsx:84
+#: src/components/Nav.tsx:86
 #: src/pages/Offers.tsx:214
 msgid "Offers"
 msgstr "报价"
@@ -2941,7 +2944,7 @@ msgstr ""
 msgid "options"
 msgstr ""
 
-#: src/components/Nav.tsx:75
+#: src/components/Nav.tsx:77
 msgid "Options"
 msgstr ""
 
@@ -3059,7 +3062,7 @@ msgstr ""
 #~ msgid "Peak Height"
 #~ msgstr "最高高度"
 
-#: src/components/Nav.tsx:185
+#: src/components/Nav.tsx:195
 msgid "peer"
 msgstr ""
 
@@ -3067,7 +3070,7 @@ msgstr ""
 msgid "Peer List"
 msgstr "节点列表"
 
-#: src/components/Nav.tsx:185
+#: src/components/Nav.tsx:195
 msgid "peers"
 msgstr ""
 
@@ -3214,7 +3217,7 @@ msgstr "个人资料名称"
 #~ msgid "Profile NFTs"
 #~ msgstr ""
 
-#: src/components/Nav.tsx:66
+#: src/components/Nav.tsx:68
 #: src/pages/DidList.tsx:66
 msgid "Profiles"
 msgstr "个人资料"
@@ -3537,7 +3540,7 @@ msgstr ""
 msgid "Secondary"
 msgstr ""
 
-#: src/components/Nav.tsx:153
+#: src/components/Nav.tsx:163
 msgid "Secondary navigation"
 msgstr ""
 
@@ -3703,7 +3706,7 @@ msgstr ""
 msgid "Set a specific address to send change to"
 msgstr ""
 
-#: src/components/Nav.tsx:218
+#: src/components/Nav.tsx:228
 #: src/pages/Settings.tsx:108
 msgid "Settings"
 msgstr "设置"
@@ -3981,7 +3984,7 @@ msgstr "摘要"
 msgid "Support for Clawback v2 is limited at this time. Please make sure the recipient supports it before submitting this transaction."
 msgstr ""
 
-#: src/components/Nav.tsx:93
+#: src/components/Nav.tsx:95
 #: src/pages/Swap.tsx:335
 msgid "Swap"
 msgstr ""
@@ -4035,11 +4038,11 @@ msgstr ""
 msgid "Sync Status"
 msgstr ""
 
-#: src/components/Nav.tsx:161
+#: src/components/Nav.tsx:171
 msgid "Synced"
 msgstr ""
 
-#: src/components/Nav.tsx:190
+#: src/components/Nav.tsx:200
 msgid "synced to peak {peerMaxHeight}"
 msgstr ""
 
@@ -4047,7 +4050,7 @@ msgstr ""
 msgid "Syncing"
 msgstr ""
 
-#: src/components/Nav.tsx:176
+#: src/components/Nav.tsx:186
 msgid "Syncing {syncedCoins} / {totalCoins}"
 msgstr "正在同步 {syncedCoins} / {totalCoins}"
 
@@ -4471,7 +4474,7 @@ msgstr ""
 msgid "Toggle multi-select"
 msgstr "切换多重选择"
 
-#: src/components/Header.tsx:69
+#: src/components/MobileNavSheet.tsx:27
 msgid "Toggle navigation menu"
 msgstr "切换导航菜单"
 
@@ -4622,7 +4625,7 @@ msgstr ""
 #~ msgid "Transaction Time"
 #~ msgstr ""
 
-#: src/components/Nav.tsx:110
+#: src/components/Nav.tsx:111
 #: src/pages/Transactions.tsx:149
 msgid "Transactions"
 msgstr "交易"
@@ -5029,7 +5032,7 @@ msgstr ""
 msgid "WAL Pages Checkpointed"
 msgstr ""
 
-#: src/components/Nav.tsx:49
+#: src/components/Nav.tsx:51
 #: src/components/WalletSwitcher.tsx:217
 #: src/components/WalletSwitcher.tsx:261
 #: src/components/WalletSwitcher.tsx:331
@@ -5101,7 +5104,7 @@ msgstr ""
 msgid "While 12 word mnemonics are sufficiently hard to crack, you can choose to use 24 instead to increase security."
 msgstr "虽然12个助记词单词已经足够安全, 仍然可以选择使用24个单词来进一步增强安全性."
 
-#: src/components/Nav.tsx:195
+#: src/components/Nav.tsx:205
 msgid "with {syncedCoins} / {totalCoins} coins synced"
 msgstr ""
 

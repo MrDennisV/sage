@@ -14,7 +14,8 @@ use sage_database::{AssetKind, OfferRow, OfferStatus, OfferedAsset, SqlExecutor}
 use sage_wallet::portable::unix_timestamp;
 use sage_wallet::prelude::*;
 use sage_wallet::{
-    Offered, Requested, RequestedCat, Wallet, WalletError, aggregate_offers, sort_offer,
+    Offered, Requested, RequestedCat, TakenOffer, Wallet, WalletError, aggregate_offers,
+    sort_offer,
 };
 use tracing::debug;
 
@@ -199,7 +200,7 @@ impl<E: SqlExecutor> Sage<E> {
         let offer = decode_offer(&req.offer)?;
         let fee = parse_amount(req.fee)?;
 
-        let unsigned = wallet.take_offer(offer, fee).await?;
+        let taken = wallet.take_offer(offer, fee).await?;
 
         let (_mnemonic, Some(master_sk)) =
             self.keychain.extract_secrets(wallet.fingerprint, b"")?
@@ -207,14 +208,19 @@ impl<E: SqlExecutor> Sage<E> {
             return Err(Error::NoSigningKey);
         };
 
+        let TakenOffer {
+            offer,
+            spend_bundle,
+        } = taken;
         let spend_bundle = wallet
             .sign_transaction(
-                unsigned,
+                spend_bundle,
                 &AggSigConstants::new(self.network().agg_sig_me()),
                 master_sk,
-                true,
+                false,
             )
             .await?;
+        let spend_bundle = offer.take(spend_bundle);
 
         debug!(
             "{}",

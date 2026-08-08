@@ -1,12 +1,13 @@
 use chia_bls::master_to_wallet_hardened_intermediate;
 use chia_puzzle_types::{DeriveSynthetic, nft::NftMetadata, standard::StandardArgs};
 use sage_api::{
-    IncreaseDerivationIndex, IncreaseDerivationIndexResponse, RedownloadNft, RedownloadNftResponse,
-    ResyncCat, ResyncCatResponse, UpdateCat, UpdateCatResponse, UpdateDid, UpdateDidResponse,
-    UpdateNft, UpdateNftCollection, UpdateNftCollectionResponse, UpdateNftResponse, UpdateOption,
+    GetXchUsdPrice, GetXchUsdPriceResponse, IncreaseDerivationIndex,
+    IncreaseDerivationIndexResponse, RedownloadNft, RedownloadNftResponse, ResyncCat,
+    ResyncCatResponse, UpdateCat, UpdateCatResponse, UpdateDid, UpdateDidResponse, UpdateNft,
+    UpdateNftCollection, UpdateNftCollectionResponse, UpdateNftResponse, UpdateOption,
     UpdateOptionResponse,
 };
-use sage_assets::DexieCat;
+use sage_assets::{DexieCat, XchUsdPrice};
 use sage_database::{Asset, AssetKind, Derivation, SqlExecutor};
 use sage_wallet::prelude::*;
 
@@ -217,6 +218,12 @@ impl<E: SqlExecutor> Sage<E> {
         self.subscribe_puzzles(derivations).await?;
 
         Ok(IncreaseDerivationIndexResponse {})
+    }
+
+    pub async fn get_xch_usd_price(&self, _req: GetXchUsdPrice) -> Result<GetXchUsdPriceResponse> {
+        let price = XchUsdPrice::fetch().await?;
+
+        Ok(GetXchUsdPriceResponse { usd: price.usd })
     }
 }
 

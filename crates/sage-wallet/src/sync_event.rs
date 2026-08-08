@@ -26,6 +26,9 @@ pub enum SyncEvent {
     CatInfo,
     DidInfo,
     NftData,
+    NetworkChanged {
+        network_id: String,
+    },
 }
 
 cfg_if::cfg_if! {

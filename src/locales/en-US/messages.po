@@ -122,7 +122,7 @@ msgstr "{pageSize} items per page"
 #~ msgid "{peerCount, plural, one {# peer} other {# peers}}"
 #~ msgstr "{peerCount, plural, one {# peer} other {# peers}}"
 
-#: src/components/Nav.tsx:165
+#: src/components/Nav.tsx:175
 msgid "{peerCount} peers synced"
 msgstr "{peerCount} peers synced"
 
@@ -335,7 +335,7 @@ msgstr "Address not found in your wallet"
 msgid "Address to check"
 msgstr "Address to check"
 
-#: src/components/Nav.tsx:102
+#: src/components/Nav.tsx:104
 msgid "Addresses"
 msgstr "Addresses"
 
@@ -391,6 +391,10 @@ msgstr "Approve"
 #: src/walletconnect/RequestDialog.tsx:611
 msgid "Approving"
 msgstr "Approving"
+
+#: src/components/Nav.tsx:119
+msgid "Apps"
+msgstr "Apps"
 
 #: src/components/ThemeCard.tsx:204
 msgid "Are you sure you want to delete the theme \"{0}\"?"
@@ -504,8 +508,7 @@ msgstr "Automatically discover and connect to peers"
 msgid "Automatically start the RPC server when the app launches"
 msgstr "Automatically start the RPC server when the app launches"
 
-#: src/components/Header.tsx:59
-#: src/components/Header.tsx:141
+#: src/components/Header.tsx:50
 msgid "Back"
 msgstr "Back"
 
@@ -1010,11 +1013,11 @@ msgstr "Connect Wallet"
 msgid "Connected to {totalPeersCount} peers"
 msgstr "Connected to {totalPeersCount} peers"
 
-#: src/components/Nav.tsx:192
+#: src/components/Nav.tsx:202
 msgid "connecting..."
 msgstr "connecting..."
 
-#: src/components/Nav.tsx:167
+#: src/components/Nav.tsx:177
 #: src/pages/Settings.tsx:534
 msgid "Connecting..."
 msgstr "Connecting..."
@@ -1452,7 +1455,7 @@ msgstr "Display name"
 msgid "Done"
 msgstr "Done"
 
-#: src/components/Nav.tsx:172
+#: src/components/Nav.tsx:182
 msgid "Downloading {checkedFiles} / {totalFiles}"
 msgstr "Downloading {checkedFiles} / {totalFiles}"
 
@@ -2294,13 +2297,13 @@ msgstr "Log Viewer"
 msgid "Login"
 msgstr "Login"
 
-#: src/components/Nav.tsx:230
-#: src/components/Nav.tsx:236
+#: src/components/Nav.tsx:240
 #: src/components/Nav.tsx:246
+#: src/components/Nav.tsx:256
 msgid "Logout"
 msgstr "Logout"
 
-#: src/components/Nav.tsx:42
+#: src/components/Nav.tsx:44
 msgid "Main navigation"
 msgstr "Main navigation"
 
@@ -2471,7 +2474,7 @@ msgstr "Navigate to: {0}"
 #~ msgid "Navigate to: {content}"
 #~ msgstr "Navigate to: {content}"
 
-#: src/components/Header.tsx:82
+#: src/components/MobileNavSheet.tsx:42
 msgid "Navigation menu"
 msgstr "Navigation menu"
 
@@ -2592,7 +2595,7 @@ msgid "NFT view options"
 msgstr "NFT view options"
 
 #: src/components/MultiSelectActions.tsx:271
-#: src/components/Nav.tsx:58
+#: src/components/Nav.tsx:60
 #: src/components/NftGroupCard.tsx:466
 #: src/components/NftPageTitle.tsx:44
 msgid "NFTs"
@@ -2819,7 +2822,7 @@ msgstr "Offered in exchange:"
 msgid "Offering"
 msgstr "Offering"
 
-#: src/components/Nav.tsx:84
+#: src/components/Nav.tsx:86
 #: src/pages/Offers.tsx:214
 msgid "Offers"
 msgstr "Offers"
@@ -2941,7 +2944,7 @@ msgstr "Option Minting"
 msgid "options"
 msgstr "options"
 
-#: src/components/Nav.tsx:75
+#: src/components/Nav.tsx:77
 msgid "Options"
 msgstr "Options"
 
@@ -3059,7 +3062,7 @@ msgstr "Paying"
 #~ msgid "Peak Height"
 #~ msgstr "Peak Height"
 
-#: src/components/Nav.tsx:185
+#: src/components/Nav.tsx:195
 msgid "peer"
 msgstr "peer"
 
@@ -3067,7 +3070,7 @@ msgstr "peer"
 msgid "Peer List"
 msgstr "Peer List"
 
-#: src/components/Nav.tsx:185
+#: src/components/Nav.tsx:195
 msgid "peers"
 msgstr "peers"
 
@@ -3214,7 +3217,7 @@ msgstr "Profile name"
 #~ msgid "Profile NFTs"
 #~ msgstr "Profile NFTs"
 
-#: src/components/Nav.tsx:66
+#: src/components/Nav.tsx:68
 #: src/pages/DidList.tsx:66
 msgid "Profiles"
 msgstr "Profiles"
@@ -3537,7 +3540,7 @@ msgstr "Search..."
 msgid "Secondary"
 msgstr "Secondary"
 
-#: src/components/Nav.tsx:153
+#: src/components/Nav.tsx:163
 msgid "Secondary navigation"
 msgstr "Secondary navigation"
 
@@ -3703,7 +3706,7 @@ msgstr "Set a default expiration time for new offers"
 msgid "Set a specific address to send change to"
 msgstr "Set a specific address to send change to"
 
-#: src/components/Nav.tsx:218
+#: src/components/Nav.tsx:228
 #: src/pages/Settings.tsx:108
 msgid "Settings"
 msgstr "Settings"
@@ -3981,7 +3984,7 @@ msgstr "Summary"
 msgid "Support for Clawback v2 is limited at this time. Please make sure the recipient supports it before submitting this transaction."
 msgstr "Support for Clawback v2 is limited at this time. Please make sure the recipient supports it before submitting this transaction."
 
-#: src/components/Nav.tsx:93
+#: src/components/Nav.tsx:95
 #: src/pages/Swap.tsx:335
 msgid "Swap"
 msgstr "Swap"
@@ -4035,11 +4038,11 @@ msgstr "Symbol"
 msgid "Sync Status"
 msgstr "Sync Status"
 
-#: src/components/Nav.tsx:161
+#: src/components/Nav.tsx:171
 msgid "Synced"
 msgstr "Synced"
 
-#: src/components/Nav.tsx:190
+#: src/components/Nav.tsx:200
 msgid "synced to peak {peerMaxHeight}"
 msgstr "synced to peak {peerMaxHeight}"
 
@@ -4047,7 +4050,7 @@ msgstr "synced to peak {peerMaxHeight}"
 msgid "Syncing"
 msgstr "Syncing"
 
-#: src/components/Nav.tsx:176
+#: src/components/Nav.tsx:186
 msgid "Syncing {syncedCoins} / {totalCoins}"
 msgstr "Syncing {syncedCoins} / {totalCoins}"
 
@@ -4472,7 +4475,7 @@ msgstr "To:"
 msgid "Toggle multi-select"
 msgstr "Toggle multi-select"
 
-#: src/components/Header.tsx:69
+#: src/components/MobileNavSheet.tsx:27
 msgid "Toggle navigation menu"
 msgstr "Toggle navigation menu"
 
@@ -4623,7 +4626,7 @@ msgstr "Transaction submitted successfully"
 #~ msgid "Transaction Time"
 #~ msgstr "Transaction Time"
 
-#: src/components/Nav.tsx:110
+#: src/components/Nav.tsx:111
 #: src/pages/Transactions.tsx:149
 msgid "Transactions"
 msgstr "Transactions"
@@ -5031,7 +5034,7 @@ msgstr "WAL Pages"
 msgid "WAL Pages Checkpointed"
 msgstr "WAL Pages Checkpointed"
 
-#: src/components/Nav.tsx:49
+#: src/components/Nav.tsx:51
 #: src/components/WalletSwitcher.tsx:217
 #: src/components/WalletSwitcher.tsx:261
 #: src/components/WalletSwitcher.tsx:331
@@ -5103,7 +5106,7 @@ msgstr "Warning: This is a one-sided offer. You are not requesting anything in r
 msgid "While 12 word mnemonics are sufficiently hard to crack, you can choose to use 24 instead to increase security."
 msgstr "While 12 word mnemonics are sufficiently hard to crack, you can choose to use 24 instead to increase security."
 
-#: src/components/Nav.tsx:195
+#: src/components/Nav.tsx:205
 msgid "with {syncedCoins} / {totalCoins} coins synced"
 msgstr "with {syncedCoins} / {totalCoins} coins synced"
 
