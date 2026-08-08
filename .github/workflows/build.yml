@@ -50,6 +50,39 @@ jobs:
       - name: Fmt
         run: cargo fmt --all -- --files-with-diff --check
 
+  extension:
+    name: Extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PNPM
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Add wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Build
+        run: pnpm build:extension
+
+      # Static check: every command the interface can invoke is either
+      # dispatchable by the wasm core or listed as intentionally unsupported.
+      - name: Command audit
+        run: node tests/extension/command-audit.mjs
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-extension
+          path: dist-extension
+
   build:
     name: ${{ matrix.platform_name }}
     runs-on: ${{ matrix.platform }}
