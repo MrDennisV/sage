@@ -131,7 +131,7 @@ impl SyncManager {
                     };
 
                     if message.msg_type != ProtocolMessageTypes::Handshake {
-                        return Err(ClientError::InvalidResponse(
+                        Err(ClientError::InvalidResponse(
                             vec![ProtocolMessageTypes::Handshake],
                             message.msg_type,
                         ))?;
@@ -141,14 +141,14 @@ impl SyncManager {
                         Handshake::from_bytes(&message.data).map_err(ClientError::from)?;
 
                     if handshake.node_type != NodeType::Introducer {
-                        return Err(ClientError::WrongNodeType(
+                        Err(ClientError::WrongNodeType(
                             NodeType::Introducer,
                             handshake.node_type,
                         ))?;
                     }
 
                     if handshake.network_id != network_id {
-                        return Err(ClientError::WrongNetwork(
+                        Err(ClientError::WrongNetwork(
                             network_id.to_string(),
                             handshake.network_id,
                         ))?;
